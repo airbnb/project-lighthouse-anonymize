@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Project Lighthouse Anonymize"
+date-released: 2026-01-26
+url: "https://github.com/airbnb/project-lighthouse-anonymize"
+repository-code: "https://github.com/airbnb/project-lighthouse-anonymize"
+license: MIT
+authors:
+  - family-names: "Bloomston"
+    given-names: "Adam"
+    affiliation: "Airbnb"
+  - name: "Airbnb Anti-Discrimination & Equity Engineering Team"
+    email: "antidiscrimination-papers@airbnb.com"
+keywords:
+  - privacy
+  - anonymization
+  - k-anonymity
+  - p-sensitive k-anonymity
+  - mondrian
+abstract: |
+  Project Lighthouse Anonymize provides privacy-preserving data anonymization
+  algorithms including k-anonymity, p-sensitive k-anonymity, and Core Mondrian.
+  The library is designed for researchers and practitioners working with
+  sensitive tabular data.
