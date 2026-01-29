@@ -58,6 +58,8 @@ All linting and tests must pass before creating a commit.
 
 ## Code Style Guidelines
 
+<edit_guidelines>
+
 ### Docstrings
 Use **NumPy style conventions**:
 
@@ -144,6 +146,8 @@ Guidelines:
 - Use `@staticmethod` for test helper methods that don't need instance state
 - Use `@property` or class attributes for shared test data when appropriate
 - Keep test data generation methods within the test class
+
+</edit_guidelines>
 
 ## Documentation
 
