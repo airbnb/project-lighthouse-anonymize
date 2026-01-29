@@ -81,6 +81,27 @@ def example_function(param1, param2):
     """
 ```
 
+### Citations in Docstrings
+
+When adding academic references to module or function docstrings:
+
+1. **Use globally unique citation names** - Sphinx combines all docstrings, so `[1]` in different modules will collide. Use `[AuthorYear]` style (e.g., `[Sweeney2002]`, `[LeFevre2006]`).
+
+2. **Always reference citations in the text** - Sphinx requires citations to be referenced with `[CitationName]_` syntax:
+
+```python
+"""
+This implements k-anonymity [Sweeney2002]_, using Mondrian partitioning [LeFevre2006]_.
+
+References
+----------
+.. [Sweeney2002] L. Sweeney. "k-anonymity: A model for protecting privacy." ...
+.. [LeFevre2006] K. LeFevre et al. "Mondrian multidimensional k-anonymity." ...
+"""
+```
+
+3. **For multiple papers by same author/year**, add suffixes: `[Bloomston2025a]`, `[Bloomston2025b]`
+
 ### Comments
 - ONLY add comments for: complex algorithms, non-obvious privacy model assumptions, performance optimizations, subtle bugs/workarounds
 - DON'T comment: obvious code, standard library usage, basic flow

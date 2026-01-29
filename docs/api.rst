@@ -20,8 +20,7 @@ These are the main functions exported by the top-level ``project_lighthouse_anon
 
 .. autofunction:: project_lighthouse_anonymize.prepare_gtrees
 
-.. autodata:: project_lighthouse_anonymize.default_dq_metric_to_minimum_dq
-   :annotation:
+.. autofunction:: project_lighthouse_anonymize.default_dq_metric_to_minimum_dq
 
 Constants
 ---------
@@ -167,6 +166,7 @@ P-Sensitize
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 Pandas Utilities
 ----------------

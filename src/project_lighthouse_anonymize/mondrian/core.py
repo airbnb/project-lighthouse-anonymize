@@ -1,11 +1,11 @@
 """
 Core Mondrian algorithm.
 
-This module implements an extension of the Mondrian algorithm for multidimensional
+This module implements an extension of the Mondrian algorithm [LeFevre2006]_ for multidimensional
 data anonymization. The algorithm recursively partitions the data space and applies
 domain-specific generalization strategies to achieve anonymity. The implementation
 is designed to be extensible through different implementation classes that define
-behaviors for different technical privacy models.
+behaviors for different technical privacy models [Bloomston2025a]_.
 
 Key Enhancements Over Original Mondrian Algorithm:
 ---------------------------------------------------
@@ -32,10 +32,10 @@ Key Enhancements Over Original Mondrian Algorithm:
 
 References
 ----------
-.. [1] LeFevre, K., DeWitt, D. J., & Ramakrishnan, R. (2006, April).
+.. [LeFevre2006] LeFevre, K., DeWitt, D. J., & Ramakrishnan, R. (2006, April).
        Mondrian multidimensional k-anonymity. In 22nd International Conference on
        Data Engineering (ICDE'06) (pp. 25-25). IEEE.
-.. [2] Bloomston, A., Burke, E., Cacace, M., Diaz, A., Dougherty, W., Gonzalez, M.,
+.. [Bloomston2025a] Bloomston, A., Burke, E., Cacace, M., Diaz, A., Dougherty, W., Gonzalez, M.,
        Gregg, R., Güngör, Y., Hayes, B., Hsu, E., Israeli, O., Kim, H., Kwasnick, S.,
        Lacsina, J., Rodriguez, D. R., Schiller, A., Schumacher, W., Simon, J., Tang, M.,
        Wharton, S., & Wilcken, M. (2025). Core Mondrian: Basic Mondrian beyond k-anonymity.

@@ -1,8 +1,8 @@
 """
 Core Mondrian Implementation for k-anonymity.
 
-This module implements the Core Mondrian algorithm for k-anonymity, a privacy protection
-model that ensures each record in a dataset is indistinguishable from at least k-1
+This module implements the Core Mondrian algorithm for k-anonymity [Sweeney2002]_, a privacy
+protection model that ensures each record in a dataset is indistinguishable from at least k-1
 other records based on quasi-identifier values.
 
 The implementation extends the Revised Information Loss Metric (RILM) implementation
@@ -12,15 +12,15 @@ with k-anonymity-specific logic for:
 - Implementing appropriate cut strategies for both numerical and categorical QIDs
 
 K-anonymity is achieved by ensuring that, for each partition of data, there are at least
-k records with the same quasi-identifier values. The algorithm recursively partitions
-the data until further partitioning would violate this property.
+k records with the same quasi-identifier values. The algorithm uses Mondrian
+multidimensional partitioning [LeFevreMondrian]_ to recursively partition the data until
+further partitioning would violate this property.
 
 References
 ----------
-.. [1] L. Sweeney. "k-anonymity: A model for protecting privacy." International Journal of
-       Uncertainty, Fuzziness and Knowledge-Based Systems, 10(05), 557-570, 2002.
-
-.. note:: K. LeFevre, D. J. DeWitt, and R. Ramakrishnan. "Mondrian multidimensional
+.. [Sweeney2002] L. Sweeney. "k-anonymity: A model for protecting privacy." International
+       Journal of Uncertainty, Fuzziness and Knowledge-Based Systems, 10(05), 557-570, 2002.
+.. [LeFevreMondrian] K. LeFevre, D. J. DeWitt, and R. Ramakrishnan. "Mondrian multidimensional
        k-anonymity." 22nd International Conference on Data Engineering (ICDE'06), 2006.
 """
 
