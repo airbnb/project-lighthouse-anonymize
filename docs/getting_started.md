@@ -12,6 +12,8 @@ Install the required dependencies to get started:
 pip install -U --quiet ucimlrepo project-lighthouse-anonymize
 ```
 
+> **Note:** This package supports Python 3.9-3.12. Python 3.13+ is not yet supported due to the numpy<2.0.0 constraint (NumPy 2.0+ is required for Python 3.13 wheels).
+
 ## Setup logging
 
 Set up logging to track the anonymization process.
