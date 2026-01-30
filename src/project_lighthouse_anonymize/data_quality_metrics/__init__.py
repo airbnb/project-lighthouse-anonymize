@@ -1,8 +1,8 @@
 """
 Data quality metrics package for Project Lighthouse anonymization evaluation.
 
-This package provides modular implementation of data quality metrics used to evaluate
-the impact of anonymization on data utility. The metrics are organized into focused
+This package provides modular implementation of data quality metrics [Bloomston2025b]_ used to
+evaluate the impact of anonymization on data utility. The metrics are organized into focused
 modules while maintaining backward compatibility with existing imports.
 
 Modules:
@@ -16,7 +16,7 @@ All functions can be imported directly from this package for backward compatibil
 
 References
 ----------
-.. [1] Bloomston, A., Burke, E., Cacace, M., Diaz, A., Dougherty, W., Gonzalez, M.,
+.. [Bloomston2025b] Bloomston, A., Burke, E., Cacace, M., Diaz, A., Dougherty, W., Gonzalez, M.,
        Gregg, R., Güngör, Y., Hayes, B., Hsu, E., Israeli, O., Kim, H., Kwasnick, S.,
        Lacsina, J., Rodriguez, D. R., Schiller, A., Schumacher, W., Simon, J., Tang, M.,
        Wharton, S., & Wilcken, M. (2025). Measuring Data Quality for Project Lighthouse.

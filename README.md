@@ -54,7 +54,7 @@ Developed by the Airbnb Anti-Discrimination & Equity team.
 If you use this software in your research, please cite:
 
 ```
-Bloomston, A., & Airbnb Anti-Discrimination & Equity Engineering Team. (2025).
+Bloomston, A., & Airbnb Anti-Discrimination & Equity Engineering Team. (2026).
 Project Lighthouse Anonymize. https://github.com/airbnb/project-lighthouse-anonymize
 ```
 
