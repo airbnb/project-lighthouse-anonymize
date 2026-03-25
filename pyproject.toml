@@ -55,11 +55,12 @@ docs = [
     "sphinx-rtd-theme>=2.0.0",
     "sphinx-autodoc-typehints",
     "myst-parser>=2.0.0",
+    "sphinx-markdown-builder>=0.5.0,<1.0.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/airbnb/project-lighthouse-anonymize"
-Documentation = "https://project-lighthouse-anonymize.readthedocs.io"
+Documentation = "https://github.com/airbnb/project-lighthouse-anonymize/wiki"
 Repository = "https://github.com/airbnb/project-lighthouse-anonymize"
 "Bug Tracker" = "https://github.com/airbnb/project-lighthouse-anonymize/issues"
 

@@ -140,4 +140,7 @@ jobs:
         pip install -e ".[docs]"
 
     - name: Build docs
-      run: sphinx-build -b html docs docs/_build/html -W --keep-going
+      # -W omitted: sphinx-markdown-builder emits "unknown node type" warnings
+      # for RST citation nodes (docutils-level warnings, not suppressible via
+      # suppress_warnings). The build still fails on hard errors.
+      run: sphinx-build -b markdown docs docs/_build/markdown

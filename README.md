@@ -2,7 +2,6 @@
 
 [![PyPI version](https://badge.fury.io/py/project-lighthouse-anonymize.svg)](https://pypi.org/project/project-lighthouse-anonymize/)
 [![Python versions](https://img.shields.io/pypi/pyversions/project-lighthouse-anonymize.svg)](https://pypi.org/project/project-lighthouse-anonymize/)
-[![Documentation Status](https://readthedocs.org/projects/project-lighthouse-anonymize/badge/?version=latest)](https://project-lighthouse-anonymize.readthedocs.io/en/latest/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Privacy-preserving data anonymization using k-anonymity and related algorithms.
@@ -15,10 +14,10 @@ pip install project-lighthouse-anonymize
 
 ## Documentation
 
-Full documentation: https://project-lighthouse-anonymize.readthedocs.io
+Full documentation: https://github.com/airbnb/project-lighthouse-anonymize/wiki
 
 - [Getting Started Guide](docs/getting_started.md)
-- [API Reference](https://project-lighthouse-anonymize.readthedocs.io/en/latest/api/)
+- [API Reference](https://github.com/airbnb/project-lighthouse-anonymize/wiki/api)
 
 ## Publications
 
