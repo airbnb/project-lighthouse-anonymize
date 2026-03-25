@@ -25,6 +25,12 @@ html_show_copyright = False
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 
+# sphinx-markdown-builder does not implement visitors for RST citation nodes
+# (.. [Key] ...), so Sphinx emits "unknown node type: citation" warnings.
+# Suppress these so -W does not treat them as errors; citations still render
+# as plain text in the markdown output.
+suppress_warnings = ["app.add_node"]
+
 autodoc_typehints = 'signature'
 typehints_document_rtype = False
 always_document_param_types = False
