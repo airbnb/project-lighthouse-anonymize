@@ -1,8 +1,7 @@
 name: Tests
 
 # Actions are pinned to full SHAs to prevent supply chain attacks (tag hijacking).
-# TODO(Later): Consider using Dependabot to automate SHA updates, or switch to tags
-# if the maintenance burden outweighs the security benefit for this project.
+# Dependabot is configured to automate SHA updates (see .github/dependabot.yml).
 
 on:
   push:
