@@ -25,6 +25,10 @@ html_show_copyright = False
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 
+# Strip .md from cross-document links so they resolve correctly on GitHub Wiki
+# (wiki URLs are /wiki/page not /wiki/page.md).
+markdown_uri_doc_suffix = ""
+
 autodoc_typehints = 'signature'
 typehints_document_rtype = False
 always_document_param_types = False

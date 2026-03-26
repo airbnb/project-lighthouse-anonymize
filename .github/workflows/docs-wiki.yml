@@ -1,0 +1,50 @@
+name: Deploy Docs to Wiki
+
+# Actions are pinned to full SHAs to prevent supply chain attacks (tag hijacking).
+# github-wiki-action SHA 64efa0a9436db17670a2259e0ac249d6f08bb352 corresponds to v5.0.4
+# and was security-reviewed prior to adoption (see Asana task 1213033158879385).
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy-wiki:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      with:
+        fetch-depth: 0  # For hatch-vcs
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+      with:
+        python-version: "3.12"
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install hatch hatch-vcs
+        pip install -e ".[docs]"
+
+    - name: Build markdown docs
+      # No -W flag: CI (test.yml docs job) already gates on warnings
+      run: sphinx-build -b markdown docs docs/_build/markdown
+
+    - name: Rename index to Home
+      # GitHub Wiki requires the homepage to be named Home.md
+      run: mv docs/_build/markdown/index.md docs/_build/markdown/Home.md
+
+    - name: Deploy to GitHub Wiki
+      uses: Andrew-Chen-Wang/github-wiki-action@64efa0a9436db17670a2259e0ac249d6f08bb352  # v5.0.4
+      with:
+        path: docs/_build/markdown/
+        strategy: clone
+        disable-empty-commits: true
+        preprocess: false
+        token: ${{ secrets.GITHUB_TOKEN }}

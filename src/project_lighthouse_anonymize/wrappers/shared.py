@@ -226,7 +226,7 @@ def select_best_run(
 
     idx, dq_metrics = max(  # type: ignore[reportUnusedVariable]  # dq_metrics needed for tuple unpacking but only idx is used
         idx_and_dq_metrics_arr_filtered,
-        key=lambda tup: (_compute_score(tup[1])),  # (idx, dq_metrics)
+        key=lambda tup: _compute_score(tup[1]),  # (idx, dq_metrics)
     )
     return idx, minimum_dq_met
 

@@ -1,8 +1,7 @@
 name: Tests
 
 # Actions are pinned to full SHAs to prevent supply chain attacks (tag hijacking).
-# TODO(Later): Consider using Dependabot to automate SHA updates, or switch to tags
-# if the maintenance burden outweighs the security benefit for this project.
+# Dependabot is configured to automate SHA updates (see .github/dependabot.yml).
 
 on:
   push:
@@ -140,4 +139,7 @@ jobs:
         pip install -e ".[docs]"
 
     - name: Build docs
-      run: sphinx-build -b html docs docs/_build/html -W --keep-going
+      # -W omitted: sphinx-markdown-builder emits "unknown node type" warnings
+      # for RST citation nodes (docutils-level warnings, not suppressible via
+      # suppress_warnings). The build still fails on hard errors.
+      run: sphinx-build -b markdown docs docs/_build/markdown
