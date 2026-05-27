@@ -4,7 +4,7 @@ Thank you for your interest in contributing!
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
+This project follows the [Airbnb Engineering & Data Science Code of Conduct](https://airbnb.tech/open-source/code-of-conduct/).
 
 ## Development Setup
 
