@@ -236,11 +236,11 @@ class Implementation_KAnonymity(Implementation_RILM):
         their QID values and finds the size of the smallest group, which represents
         the achieved k value.
         """
-        if len(input_df) > 0:
-            _, actual_k_val = calculate_p_k(input_df, qids)
-            actual_k = float(actual_k_val) if actual_k_val is not None else float("nan")
-        else:
-            actual_k = float("nan")
+        if len(input_df) == 0:
+            # an empty dataframe has no equivalence class smaller than k
+            return True
+        _, actual_k_val = calculate_p_k(input_df, qids)
+        actual_k = float(actual_k_val) if actual_k_val is not None else float("nan")
         return actual_k >= self.k
 
     def are_cuts_possible(

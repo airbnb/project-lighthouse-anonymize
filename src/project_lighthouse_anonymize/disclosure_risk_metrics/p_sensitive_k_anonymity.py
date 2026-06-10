@@ -13,9 +13,6 @@ The main functionality includes:
 from typing import Optional, cast
 
 import pandas as pd
-from first import first  # type: ignore[import-untyped]
-
-from project_lighthouse_anonymize.pandas_utils import make_temp_id_col
 
 
 def calculate_p_k(
@@ -54,7 +51,6 @@ def calculate_p_k(
              None if sens_attr is not provided.
         - k: The minimum number of records in any equivalence class. Lower k values
              indicate higher re-identification disclosure risk.
-             Can be None in edge cases handled by callers.
 
     Raises
     ------
@@ -101,13 +97,18 @@ def calculate_p_k(
     input_df = input_df.copy(deep=True)
     cols_to_drop = set(cols) - (set(qids) | set([sens_attr]))
     input_df.drop(list(cols_to_drop), axis="columns", inplace=True)
-    make_temp_id_col(input_df)
 
     if len(qids) > 0:
-        actual_k = first(input_df.groupby(qids, dropna=False).count().min())
+        # observed=True so that unobserved categorical combinations do not create
+        # phantom empty equivalence classes: an empty class contains no individuals,
+        # but would otherwise drive k (via a zero count) and p (via nunique() == 0).
+        actual_k = int(input_df.groupby(qids, dropna=False, observed=True).size().min())
         if sens_attr is not None:
             actual_p = int(
-                cast(int, input_df.groupby(qids, dropna=False)[sens_attr].nunique().min())
+                cast(
+                    int,
+                    input_df.groupby(qids, dropna=False, observed=True)[sens_attr].nunique().min(),
+                )
             )
         else:
             actual_p = None

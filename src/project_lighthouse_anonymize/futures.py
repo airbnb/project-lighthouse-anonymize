@@ -9,14 +9,16 @@ from concurrent.futures import Future
 from concurrent.futures.process import ProcessPoolExecutor
 from typing import Any, Callable, Optional, Union
 
+_NOT_COMPUTED = object()
+
 
 class InProcessResult:
     """
     A simplified implementation of concurrent.futures.Future interface.
 
     This class provides a minimal implementation of the Future interface
-    that executes the function in-process when result() is called, rather
-    than executing in a separate process or thread.
+    that executes the function in-process when result() is first called,
+    rather than executing in a separate process or thread.
 
     Parameters
     ----------
@@ -34,17 +36,25 @@ class InProcessResult:
         self.func = func
         self.args = args
         self.kwargs = kwargs
+        self._result: Any = _NOT_COMPUTED
 
     def result(self) -> Any:
         """
-        Execute the function and return its result.
+        Execute the function on the first call and return its (cached) result.
+
+        Like concurrent.futures.Future, the function is executed exactly once;
+        subsequent calls return the cached result. Re-executing would evaluate
+        against the current state of shared arguments, which may have been
+        mutated since the first call.
 
         Returns
         -------
         Any
             The result of calling the function with the provided arguments
         """
-        return self.func(*self.args, **self.kwargs)
+        if self._result is _NOT_COMPUTED:
+            self._result = self.func(*self.args, **self.kwargs)
+        return self._result
 
     def cancel(self) -> bool:
         """

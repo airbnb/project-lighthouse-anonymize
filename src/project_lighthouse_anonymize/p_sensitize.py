@@ -105,7 +105,9 @@ def p_sensitize(
     all_indices_perturbated: list[Any] = []
     all_indices_new_sens_attr_values: list[str] = []
     if len(qids) > 0:
-        input_df.groupby(qids, dropna=False, group_keys=False).apply(
+        # observed=True so that unobserved categorical combinations do not create
+        # phantom empty equivalence classes, which would crash perturbation
+        input_df.groupby(qids, dropna=False, group_keys=False, observed=True).apply(
             lambda df: _impl_p_sensitize_equivalence_class_func(
                 df,
                 sens_attr_col,
@@ -163,6 +165,44 @@ def _validate_p_sensitize_inputs(
     ValueError
         If any input requirement is not met.
     """
+    _validate_p_sensitize_columns(input_df, qids, sens_attr_col)
+    if target_p < 1:
+        raise ValueError("target_p must be >= 1")
+    if target_k < target_p:
+        raise ValueError(f"Target k ({target_k}) not >= target p ({target_p}); p must be <= k")
+    # Only values with non-zero probability count toward target_p feasibility:
+    # rng.choice with replace=False can never select a zero-probability value.
+    n_selectable_values = sum(1 for prob in sens_attr_value_to_prob.values() if prob > 0)
+    if target_p > n_selectable_values:
+        raise ValueError(
+            f"Target p ({target_p}) cannot be > number of sensitive attributes with "
+            f"non-zero probability priors ({n_selectable_values})"
+        )
+
+
+def _validate_p_sensitize_columns(
+    input_df: pd.DataFrame,
+    qids: list[str],
+    sens_attr_col: str,
+) -> None:
+    """
+    Validate the dataframe and column inputs to p_sensitize.
+
+    Parameters
+    ----------
+    input_df : pd.DataFrame
+        Input dataframe to be p-sensitized.
+    qids : List[str]
+        List of quasi-identifier column names.
+    sens_attr_col : str
+        Column name of the sensitive attribute.
+
+    Raises
+    ------
+    ValueError
+        If the dataframe is empty, a column is missing, or the sensitive
+        attribute contains NA values.
+    """
     if len(input_df) == 0:
         raise ValueError("Input dataframe has no rows")
     cols = [str(col_name) for col_name in input_df.columns]
@@ -176,14 +216,6 @@ def _validate_p_sensitize_inputs(
     if any(input_df[sens_attr_col].isna()):
         raise ValueError(
             "Sensitive attribute value na is not allowed due to a bug in pandas.groupby.count"
-        )
-    if target_p < 1:
-        raise ValueError("target_p must be >= 1")
-    if target_k < target_p:
-        raise ValueError(f"Target k ({target_k}) not >= target p ({target_p}); p must be <= k")
-    if target_p > len(sens_attr_value_to_prob.keys()):
-        raise ValueError(
-            f"Target p ({target_p}) cannot be > number of sensitive attributes for which we have priors"
         )
 
 

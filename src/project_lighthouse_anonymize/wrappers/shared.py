@@ -178,57 +178,92 @@ def select_best_run(
 
     idx_and_dq_metrics_arr = list(enumerate(dq_metrics_arr))  # preserve index for return value
 
-    def filter_pass_1(
-        dq_metrics: dict[str, float],
-        dq_metric_to_minimum_dq: Optional[dict[str, float]] = dq_metric_to_minimum_dq,
-    ) -> bool:
-        passes, _ = check_dq_meets_minimum_thresholds(dq_metrics, dq_metric_to_minimum_dq)
-        return passes
+    idx_and_dq_metrics_arr_filtered = _filter_runs_by_thresholds(
+        idx_and_dq_metrics_arr, dq_metric_to_minimum_dq
+    )
+    minimum_dq_met = len(idx_and_dq_metrics_arr_filtered) > 0
 
-    idx_and_dq_metrics_arr_filtered = [
-        (idx, dq_metrics) for idx, dq_metrics in idx_and_dq_metrics_arr if filter_pass_1(dq_metrics)
-    ]
-    if len(idx_and_dq_metrics_arr_filtered) == 0:
-        idx_and_dq_metrics_arr_filtered = idx_and_dq_metrics_arr
-        minimum_dq_met = False
-    else:
-        minimum_dq_met = True
+    # Score with the same thresholds used for the final filtering pass, so that
+    # thresholds disabled in the second pass below are also disabled in scoring.
+    dq_metric_to_minimum_dq_scoring = dq_metric_to_minimum_dq
 
     if not minimum_dq_met:
         # If a data quality metric threshold is non-nan and all instances of that data quality metric are nan, then ignore that data quality metric
         # threshold and re-check to see if minimum data quality is met for the remaining data quality metric values.
-        dq_metric_to_minimum_dq_modified = dq_metric_to_minimum_dq.copy()
-        for dq_metric, minimum_dq in dq_metric_to_minimum_dq.items():
-            dq_values = [
-                dq_metric_dict[dq_metric]
-                for dq_metric_dict in dq_metrics_arr
-                if dq_metric in dq_metric_dict
-            ]
-            if np.isnan(dq_values).all() and not np.isnan(minimum_dq):
-                dq_metric_to_minimum_dq_modified[dq_metric] = np.nan
-
-        idx_and_dq_metrics_arr_filtered = [
-            (idx, dq_metrics)
-            for idx, dq_metrics in idx_and_dq_metrics_arr
-            if filter_pass_1(dq_metrics, dq_metric_to_minimum_dq_modified)
-        ]
+        dq_metric_to_minimum_dq_modified = _disable_thresholds_for_all_nan_metrics(
+            dq_metrics_arr, dq_metric_to_minimum_dq
+        )
+        idx_and_dq_metrics_arr_filtered = _filter_runs_by_thresholds(
+            idx_and_dq_metrics_arr, dq_metric_to_minimum_dq_modified
+        )
         if len(idx_and_dq_metrics_arr_filtered) == 0:
             idx_and_dq_metrics_arr_filtered = idx_and_dq_metrics_arr
-            minimum_dq_met = False
         else:
             minimum_dq_met = True
-
-    def _compute_score(
-        dq_metrics: dict[str, float],
-        dq_metric_to_minimum_dq: Optional[dict[str, float]] = dq_metric_to_minimum_dq,
-    ) -> float:
-        return compute_score(dq_metrics, dq_metric_to_minimum_dq)
+            dq_metric_to_minimum_dq_scoring = dq_metric_to_minimum_dq_modified
 
     idx, dq_metrics = max(  # type: ignore[reportUnusedVariable]  # dq_metrics needed for tuple unpacking but only idx is used
         idx_and_dq_metrics_arr_filtered,
-        key=lambda tup: _compute_score(tup[1]),  # (idx, dq_metrics)
+        key=lambda tup: compute_score(tup[1], dq_metric_to_minimum_dq_scoring),
     )
     return idx, minimum_dq_met
+
+
+def _filter_runs_by_thresholds(
+    idx_and_dq_metrics_arr: list[tuple[int, dict[str, float]]],
+    dq_metric_to_minimum_dq: dict[str, float],
+) -> list[tuple[int, dict[str, float]]]:
+    """
+    Filter (index, metrics) pairs down to runs meeting all minimum thresholds.
+
+    Parameters
+    ----------
+    idx_and_dq_metrics_arr : List[Tuple[int, Dict[str, float]]]
+        Pairs of run index and the run's data quality metrics
+    dq_metric_to_minimum_dq : Dict[str, float]
+        Mapping from data quality metric names to minimum thresholds
+
+    Returns
+    -------
+    List[Tuple[int, Dict[str, float]]]
+        The pairs whose metrics meet all minimum thresholds
+    """
+    return [
+        (idx, dq_metrics)
+        for idx, dq_metrics in idx_and_dq_metrics_arr
+        if check_dq_meets_minimum_thresholds(dq_metrics, dq_metric_to_minimum_dq)[0]
+    ]
+
+
+def _disable_thresholds_for_all_nan_metrics(
+    dq_metrics_arr: list[dict[str, float]],
+    dq_metric_to_minimum_dq: dict[str, float],
+) -> dict[str, float]:
+    """
+    Disable (set to NaN) each non-NaN threshold whose metric is NaN in every run.
+
+    Parameters
+    ----------
+    dq_metrics_arr : List[Dict[str, float]]
+        Data quality metrics from all runs
+    dq_metric_to_minimum_dq : Dict[str, float]
+        Mapping from data quality metric names to minimum thresholds
+
+    Returns
+    -------
+    Dict[str, float]
+        A copy of the threshold mapping with all-NaN metrics' thresholds disabled
+    """
+    dq_metric_to_minimum_dq_modified = dq_metric_to_minimum_dq.copy()
+    for dq_metric, minimum_dq in dq_metric_to_minimum_dq.items():
+        dq_values = [
+            dq_metric_dict[dq_metric]
+            for dq_metric_dict in dq_metrics_arr
+            if dq_metric in dq_metric_dict
+        ]
+        if np.isnan(dq_values).all() and not np.isnan(minimum_dq):
+            dq_metric_to_minimum_dq_modified[dq_metric] = np.nan
+    return dq_metric_to_minimum_dq_modified
 
 
 def compute_score(
@@ -264,42 +299,69 @@ def compute_score(
 
     The sigmoid parameters have been tuned to provide appropriate sensitivity
     at different threshold levels.
+
+    A NaN threshold disables its metric (consistent with
+    check_dq_meets_minimum_thresholds). A NaN metric value against a non-NaN
+    threshold contributes the worst possible score for that metric
+    (-minimum_dq), so the total score stays comparable across runs instead of
+    becoming NaN, which would make selection among runs order-dependent.
     """
     if dq_metric_to_minimum_dq is None:
         dq_metric_to_minimum_dq = default_dq_metric_to_minimum_dq()
     total_score = 0.0
     for dq_metric, minimum_dq in dq_metric_to_minimum_dq.items():
+        # allow missing data quality metrics
         if dq_metric in dq_metrics:
-            # allow missing data quality metrics
-            dq_value = dq_metrics[dq_metric]
-            # the score function is a piecwise sigmoid function, where we are capturing an
-            # appropriately stretched (sig_l) of portion of the standard logistic function >= 0,
-            # ie. the portion where the derivative is decreasing
-            diff = dq_value - minimum_dq
-            if diff <= 0:
-                sig_l = (
-                    -3.45
-                    + 158 * minimum_dq
-                    + -989 * math.pow(minimum_dq, 2)
-                    + 2948 * math.pow(minimum_dq, 3)
-                    + -4426 * math.pow(minimum_dq, 4)
-                    + 3229 * math.pow(minimum_dq, 5)
-                    + -906 * math.pow(minimum_dq, 6)
-                )
-                score = minimum_dq * (
-                    ((1 / (1 + math.exp(-sig_l * (diff / minimum_dq + 1)))) / 0.5) - 2
-                )
-            else:
-                sig_l = (
-                    11.2
-                    + -54.2 * minimum_dq
-                    + 293 * math.pow(minimum_dq, 2)
-                    + -546 * math.pow(minimum_dq, 3)
-                    + 369 * math.pow(minimum_dq, 4)
-                )
-                score = (((1 / (1 + math.exp(-sig_l * diff))) - 0.5) / 0.5) * (1 - minimum_dq)
-            total_score += score
+            total_score += _compute_dq_metric_score(dq_metrics[dq_metric], minimum_dq)
     return total_score
+
+
+def _compute_dq_metric_score(dq_value: float, minimum_dq: float) -> float:
+    """
+    Score a single data quality metric value against its minimum threshold.
+
+    Parameters
+    ----------
+    dq_value : float
+        The data quality metric value
+    minimum_dq : float
+        The minimum threshold for the metric; NaN disables the metric
+
+    Returns
+    -------
+    float
+        The metric's score contribution: 0.0 for a disabled (NaN) threshold,
+        -minimum_dq (the worst possible score) for a NaN value, and otherwise
+        the piecewise sigmoid score
+    """
+    if np.isnan(minimum_dq):
+        return 0.0
+    if np.isnan(dq_value):
+        # the diff <= 0 sigmoid below has infimum -minimum_dq (at dq_value = 0)
+        return -minimum_dq
+    # the score function is a piecwise sigmoid function, where we are capturing an
+    # appropriately stretched (sig_l) of portion of the standard logistic function >= 0,
+    # ie. the portion where the derivative is decreasing
+    diff = dq_value - minimum_dq
+    if diff <= 0:
+        sig_l = (
+            -3.45
+            + 158 * minimum_dq
+            + -989 * math.pow(minimum_dq, 2)
+            + 2948 * math.pow(minimum_dq, 3)
+            + -4426 * math.pow(minimum_dq, 4)
+            + 3229 * math.pow(minimum_dq, 5)
+            + -906 * math.pow(minimum_dq, 6)
+        )
+        return minimum_dq * (((1 / (1 + math.exp(-sig_l * (diff / minimum_dq + 1)))) / 0.5) - 2)
+    sig_l = (
+        11.2
+        + -54.2 * minimum_dq
+        + 293 * math.pow(minimum_dq, 2)
+        + -546 * math.pow(minimum_dq, 3)
+        + 369 * math.pow(minimum_dq, 4)
+    )
+    return (((1 / (1 + math.exp(-sig_l * diff))) - 0.5) / 0.5) * (1 - minimum_dq)
 
 
 def prepare_gtrees(

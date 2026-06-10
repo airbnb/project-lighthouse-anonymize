@@ -58,6 +58,7 @@ from project_lighthouse_anonymize.mondrian.tree import CutChoice, ProposedCut
 from project_lighthouse_anonymize.utils import (
     atleast_nunique,
     median_max_second_max,
+    nan_safe_cut_score_sort_key,
     standard_deviation,
     standard_deviation_categorical,
 )
@@ -608,7 +609,9 @@ class Implementation_Base(metaclass=ABCMeta):
                         proposed_cut,
                         proposed_cut_score,
                     )
-                if proposed_cut_score < best_proposed_cut_score:
+                if nan_safe_cut_score_sort_key(proposed_cut_score) < nan_safe_cut_score_sort_key(
+                    best_proposed_cut_score
+                ):
                     if self.debug_logging_enabled():
                         self.logger.debug(
                             "%s - proposed cut for %s now best proposed cut, due to superior score: %s %s",

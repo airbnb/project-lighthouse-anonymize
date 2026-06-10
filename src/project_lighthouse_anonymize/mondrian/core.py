@@ -70,6 +70,7 @@ from project_lighthouse_anonymize.utils import (
     atleast_nunique,
     atleast_nunique_categorical,
     nan_generator,
+    nan_safe_cut_score_sort_key,
     parallelism__cleanup_logging,
     parallelism__get_qid_to_gtree,
     parallelism__initializer_cleanup,
@@ -299,7 +300,7 @@ class CoreMondrian:
             ]
             proposed_cut_and_scores = sorted(
                 proposed_cut_and_scores,
-                key=lambda pcs: pcs[1],
+                key=lambda pcs: nan_safe_cut_score_sort_key(pcs[1]),
             )
             if self.debug_logging_enabled():
                 self.logger.debug(
