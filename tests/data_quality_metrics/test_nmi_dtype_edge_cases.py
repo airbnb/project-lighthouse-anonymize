@@ -9,6 +9,7 @@ all-NaN QIDs), or mutate the caller's DataFrame.
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from project_lighthouse_anonymize.data_quality_metrics.nmi import (
     compute_normalized_mutual_information_sampled_scaled,
@@ -71,15 +72,38 @@ class TestNMIAllNaNColumns:
         assert np.isnan(mis_1["a"]) and np.isnan(mis_2["a"])
         assert not np.isnan(mis_1["b"]) and not np.isnan(mis_2["b"])
 
-    def test_fully_suppressed_integer_convertible_anon(self):
-        """A fully suppressed anon column maps to NaN even when Int64-convertible
 
-        The float path already yields NaN for an all-NaN anon column; the
-        Int64-convertible path must behave the same instead of raising.
+class TestNMIFullySuppressedAnon:
+    """Tests for anon columns whose values are entirely NaN (fully suppressed)"""
+
+    def test_fully_suppressed_anon_reports_complete_loss(self):
+        """A fully suppressed anon column reports NMIv1=0.0 and NMIv2=1.0
+
+        The anonymized column carries zero information, so the constant-column
+        convention applies: complete information loss (failing data quality
+        thresholds) rather than NaN, which the wrapper's nanmin aggregation
+        would silently drop, certifying the destroyed attribute as passing.
         """
-        df = pd.DataFrame({"q_o": [1.5, 2.5, 3.5], "q_a": [np.nan] * 3})
+        df = pd.DataFrame(
+            {
+                "q_o": np.arange(10, dtype="float64") + 0.5,
+                "q_a": [np.nan] * 10,
+            }
+        )
         mis_1, mis_2 = compute_normalized_mutual_information_sampled_scaled(df, ["q"], "_o", "_a")
-        assert np.isnan(mis_1["q"]) and np.isnan(mis_2["q"])
+        assert mis_1["q"] == pytest.approx(0.0)
+        assert mis_2["q"] == pytest.approx(1.0)
+
+    def test_fully_suppressed_constant_orig_reports_no_information(self):
+        """A fully suppressed anon column with a constant orig column reports 1.0
+
+        With H(X) = 0 there is no information to encode, so the 0/0 special
+        case applies to both NMI versions.
+        """
+        df = pd.DataFrame({"q_o": [2.5, 2.5, 2.5], "q_a": [np.nan] * 3})
+        mis_1, mis_2 = compute_normalized_mutual_information_sampled_scaled(df, ["q"], "_o", "_a")
+        assert mis_1["q"] == pytest.approx(1.0)
+        assert mis_2["q"] == pytest.approx(1.0)
 
 
 class TestNMICallerIsolation:

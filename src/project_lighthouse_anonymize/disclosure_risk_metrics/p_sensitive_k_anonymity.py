@@ -50,7 +50,9 @@ def calculate_p_k(
              Lower p values indicate higher attribute disclosure risk.
              None if sens_attr is not provided.
         - k: The minimum number of records in any equivalence class. Lower k values
-             indicate higher re-identification disclosure risk.
+             indicate higher re-identification disclosure risk. Typed Optional for
+             API compatibility, but always an int for the non-empty input this
+             function requires.
 
     Raises
     ------

@@ -302,9 +302,10 @@ def compute_score(
 
     A NaN threshold disables its metric (consistent with
     check_dq_meets_minimum_thresholds). A NaN metric value against a non-NaN
-    threshold contributes the worst possible score for that metric
-    (-minimum_dq), so the total score stays comparable across runs instead of
-    becoming NaN, which would make selection among runs order-dependent.
+    threshold contributes -2 * minimum_dq, strictly worse than any measurable
+    value for that metric, so the total score stays comparable across runs
+    instead of becoming NaN, which would make selection among runs
+    order-dependent.
     """
     if dq_metric_to_minimum_dq is None:
         dq_metric_to_minimum_dq = default_dq_metric_to_minimum_dq()
@@ -331,14 +332,15 @@ def _compute_dq_metric_score(dq_value: float, minimum_dq: float) -> float:
     -------
     float
         The metric's score contribution: 0.0 for a disabled (NaN) threshold,
-        -minimum_dq (the worst possible score) for a NaN value, and otherwise
-        the piecewise sigmoid score
+        -2 * minimum_dq (strictly below every attainable score) for a NaN
+        value, and otherwise the piecewise sigmoid score
     """
     if np.isnan(minimum_dq):
         return 0.0
     if np.isnan(dq_value):
-        # the diff <= 0 sigmoid below has infimum -minimum_dq (at dq_value = 0)
-        return -minimum_dq
+        # the diff <= 0 sigmoid below approaches but never attains -2 * minimum_dq as
+        # dq_value -> -inf, so this is strictly worse than any measured value
+        return -2.0 * minimum_dq
     # the score function is a piecwise sigmoid function, where we are capturing an
     # appropriately stretched (sig_l) of portion of the standard logistic function >= 0,
     # ie. the portion where the derivative is decreasing

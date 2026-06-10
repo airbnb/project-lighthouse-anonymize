@@ -4,8 +4,10 @@ Tests for NaN handling in compute_score and select_best_run.
 A NaN data quality metric value (or a NaN threshold) must not poison the
 composite score: a NaN total score makes max() in select_best_run
 order-dependent, degenerating "select the best of N runs" into "select the
-first run" whenever any run scores NaN. This is the common production shape
-for categorical-only datasets, where pearsons/NMI metrics are NaN.
+first run" whenever any run scores NaN. Through the k_anonymize wrapper,
+categorical-only datasets omit the pearsons/NMI keys rather than setting them
+to NaN; explicit NaN metric values reach these public functions through direct
+API callers and are the shape modeled by the legacy select_best_run tests.
 """
 
 import math
@@ -30,10 +32,15 @@ class TestComputeScoreNaN:
         assert score == pytest.approx(compute_score({"a": 0.95}, {"a": 0.90}))
 
     def test_nan_value_scores_worst_not_nan(self):
-        """A NaN metric value scores at most as low as any real value, never NaN"""
+        """A NaN metric value scores strictly below any real value, never NaN
+
+        Strictness matters: if a NaN tied a measured value (e.g. 0.0), max()
+        in select_best_run would break the tie by position, re-introducing
+        order-dependent selection for that tie.
+        """
         score_nan = compute_score({"a": NOT_DEFINED_NA}, {"a": 0.90})
         assert not np.isnan(score_nan)
-        assert score_nan <= compute_score({"a": 0.0}, {"a": 0.90})
+        assert score_nan < compute_score({"a": 0.0}, {"a": 0.90})
         assert score_nan < compute_score({"a": 0.5}, {"a": 0.90})
 
 

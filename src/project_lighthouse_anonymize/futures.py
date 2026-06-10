@@ -37,23 +37,36 @@ class InProcessResult:
         self.args = args
         self.kwargs = kwargs
         self._result: Any = _NOT_COMPUTED
+        self._exception: Optional[Exception] = None
 
     def result(self) -> Any:
         """
         Execute the function on the first call and return its (cached) result.
 
-        Like concurrent.futures.Future, the function is executed exactly once;
-        subsequent calls return the cached result. Re-executing would evaluate
-        against the current state of shared arguments, which may have been
-        mutated since the first call.
+        Like concurrent.futures.Future, the function is executed exactly once:
+        subsequent calls return the cached result, and an exception raised by
+        the first call is cached and re-raised by subsequent calls. Re-executing
+        would evaluate against the current state of shared arguments, which may
+        have been mutated since the first call.
 
         Returns
         -------
         Any
             The result of calling the function with the provided arguments
+
+        Raises
+        ------
+        Exception
+            The exception raised by the function, on every call
         """
+        if self._exception is not None:
+            raise self._exception
         if self._result is _NOT_COMPUTED:
-            self._result = self.func(*self.args, **self.kwargs)
+            try:
+                self._result = self.func(*self.args, **self.kwargs)
+            except Exception as exception:
+                self._exception = exception
+                raise
         return self._result
 
     def cancel(self) -> bool:

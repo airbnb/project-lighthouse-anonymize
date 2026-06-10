@@ -7,6 +7,8 @@ re-execute the function against the current (possibly mutated) state of
 shared arguments, diverging from parallel-mode behavior.
 """
 
+import pytest
+
 from project_lighthouse_anonymize.futures import InProcessResult, make_future
 
 
@@ -39,3 +41,27 @@ class TestInProcessResultCaching:
         assert future.result() == 1
         state["value"] = 2
         assert future.result() == 1, "result() re-executed against mutated state"
+
+
+class TestInProcessResultExceptionCaching:
+    """Tests that InProcessResult caches and re-raises exceptions"""
+
+    def test_exception_cached_and_reraised(self):
+        """A raised exception is cached and re-raised, matching Future
+
+        concurrent.futures.Future stores the exception and re-raises it on
+        every result() call; re-executing the function could flip from failure
+        to success against mutated state.
+        """
+        call_count = []
+
+        def failing_func():
+            call_count.append(1)
+            raise ValueError("transient failure")
+
+        in_process_result = InProcessResult(failing_func, (), {})
+        with pytest.raises(ValueError, match="transient failure"):
+            in_process_result.result()
+        with pytest.raises(ValueError, match="transient failure"):
+            in_process_result.result()
+        assert len(call_count) == 1, f"function executed {len(call_count)} times"

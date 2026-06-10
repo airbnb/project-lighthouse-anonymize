@@ -170,13 +170,13 @@ def _validate_p_sensitize_inputs(
         raise ValueError("target_p must be >= 1")
     if target_k < target_p:
         raise ValueError(f"Target k ({target_k}) not >= target p ({target_p}); p must be <= k")
-    # Only values with non-zero probability count toward target_p feasibility:
-    # rng.choice with replace=False can never select a zero-probability value.
-    n_selectable_values = sum(1 for prob in sens_attr_value_to_prob.values() if prob > 0)
-    if target_p > n_selectable_values:
+    # Values already present in an equivalence class count toward its p even with a
+    # zero probability prior, so the global feasibility bound is the total number of
+    # allowable values. Per-class feasibility of the values that must be *added* is
+    # checked at perturbation time, where the class contents are known.
+    if target_p > len(sens_attr_value_to_prob.keys()):
         raise ValueError(
-            f"Target p ({target_p}) cannot be > number of sensitive attributes with "
-            f"non-zero probability priors ({n_selectable_values})"
+            f"Target p ({target_p}) cannot be > number of sensitive attributes for which we have priors"
         )
 
 
@@ -200,8 +200,8 @@ def _validate_p_sensitize_columns(
     Raises
     ------
     ValueError
-        If the dataframe is empty, a column is missing, or the sensitive
-        attribute contains NA values.
+        If the dataframe is empty, a column is missing, a column has a
+        categorical dtype, or the sensitive attribute contains NA values.
     """
     if len(input_df) == 0:
         raise ValueError("Input dataframe has no rows")
@@ -213,6 +213,14 @@ def _validate_p_sensitize_columns(
         raise ValueError(
             f"Sensitive attribute col ({sens_attr_col}) is not a column in the input dataframe"
         )
+    for col in [*qids, sens_attr_col]:
+        if isinstance(input_df.dtypes[col], pd.CategoricalDtype):
+            raise ValueError(
+                f"Column ({col}) has a categorical dtype, which is not supported; use "
+                "project_lighthouse_anonymize.wrappers.dtype_conversion."
+                "convert_categorical_to_object() before and "
+                "convert_object_to_categorical() after"
+            )
     if any(input_df[sens_attr_col].isna()):
         raise ValueError(
             "Sensitive attribute value na is not allowed due to a bug in pandas.groupby.count"
@@ -355,13 +363,22 @@ def _impl_p_sensitize_equivalence_class(
     if actual_p >= target_p:
         return equivalence_class_df
     existing_sens_values = set(equivalence_class_df[sens_attr_col])
+    # rng.choice with replace=False can never select a zero-probability value,
+    # so only values with non-zero probability can be added to the class
     sens_attr_value_to_prob = {
         sens_attr_value: prob
         for sens_attr_value, prob in sens_attr_value_to_prob.items()
-        if sens_attr_value not in existing_sens_values
+        if sens_attr_value not in existing_sens_values and prob > 0
     }
+    n_values_needed = target_p - actual_p
+    if len(sens_attr_value_to_prob) < n_values_needed:
+        raise ValueError(
+            f"Equivalence class with {actual_p} distinct sensitive value(s) needs "
+            f"{n_values_needed} additional value(s) to reach target p ({target_p}), but only "
+            f"{len(sens_attr_value_to_prob)} value(s) with non-zero probability are available"
+        )
     indices_to_perturbate = _select_indices_to_perturbate(
-        equivalence_class_df, sens_attr_col, target_p - actual_p, rng
+        equivalence_class_df, sens_attr_col, n_values_needed, rng
     )
     all_indices_perturbated.extend(indices_to_perturbate)
     potential_new_sens_attr_values = list(sens_attr_value_to_prob.keys())
@@ -374,7 +391,7 @@ def _impl_p_sensitize_equivalence_class(
     potential_new_sens_attr_probs /= potential_new_sens_attr_probs.sum()
     new_sens_attr_values = rng.choice(
         potential_new_sens_attr_values,
-        size=target_p - actual_p,
+        size=n_values_needed,
         replace=False,
         p=potential_new_sens_attr_probs,
     )
@@ -438,14 +455,21 @@ def _impl_p_sensitize_equivalence_class_peq2(
     actual_p = equivalence_class_df[sens_attr_col].nunique()
     if actual_p >= 2:
         return equivalence_class_df
-    index_to_perturbate = rng.choice(cast(np.ndarray, equivalence_class_df.index))
-    all_indices_perturbated.append(index_to_perturbate)
     homogenous_sens_attr_value = equivalence_class_df[sens_attr_col].iat[0]
+    # rng.choice can never select a zero-probability value, so only values with
+    # non-zero probability can be added to the class
     potential_new_sens_attr_values = [
         sens_attr_value
-        for sens_attr_value in sens_attr_value_to_prob.keys()
-        if sens_attr_value != homogenous_sens_attr_value
+        for sens_attr_value, prob in sens_attr_value_to_prob.items()
+        if sens_attr_value != homogenous_sens_attr_value and prob > 0
     ]
+    if len(potential_new_sens_attr_values) == 0:
+        raise ValueError(
+            "Equivalence class with 1 distinct sensitive value needs 1 additional value to "
+            "reach target p (2), but only 0 value(s) with non-zero probability are available"
+        )
+    index_to_perturbate = rng.choice(cast(np.ndarray, equivalence_class_df.index))
+    all_indices_perturbated.append(index_to_perturbate)
     potential_new_sens_attr_probs = np.array(
         [
             sens_attr_value_to_prob[sens_attr_value]

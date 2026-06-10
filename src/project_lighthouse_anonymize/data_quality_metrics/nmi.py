@@ -127,13 +127,19 @@ def compute_normalized_mutual_information_sampled_scaled(
         assert any(x.isna() & ~y.isna()) is False, (
             "This should never happen: there should never be any rows where the orig cell is nan, but the anon cell is not nan"
         )
-        if len(y) == 0 or all(y.isna()):
-            # The qid's original values are all NA/nan, or every anonymized value was
-            # locally suppressed: the NMI is undefined. The latter matches the pure-float
-            # path, where sklearn raises on all-NaN input and the result is NaN.
+        if len(y) == 0:
+            # the qid's original values are all NA/nan: there is no data, so the NMI is undefined
             mis_1[qid] = NOT_DEFINED_NA
             mis_2[qid] = NOT_DEFINED_NA
             continue
+        if all(y.isna()):
+            # Every anonymized value was locally suppressed: the anonymized column carries
+            # zero information. Replace with a constant so the constant-column convention
+            # below applies: NMIv1 = 0.0 (complete information loss, failing data quality
+            # thresholds) and NMIv2 = 1.0 (no information to encode). NaN would instead be
+            # silently dropped by the caller's nanmin aggregation, hiding the loss.
+            y = y.astype("float64")
+            y[:] = 0.0
         # Replace locally suppressed anonymized attribute values. In other words, if orig is not NA/nan but anon is
         # NA/nan, replace anon with a numerical value.
         if any(y.isna()):

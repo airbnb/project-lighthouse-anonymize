@@ -593,6 +593,12 @@ class GTree(Tree):
         -----
         This method also updates all internal mappings to ensure the serialized
         tree includes the most up-to-date information.
+
+        Raises
+        ------
+        ValueError
+            If two leaves share the same value (see
+            update_lowest_node_with_descendant_leaves_if).
         """
         # update internal maps before serializing, for efficient use later
         self.update_highest_node_with_value_if()
@@ -637,10 +643,18 @@ class GTree(Tree):
         defined in the input dictionary. The input dictionary is not modified, so
         it can be used to construct multiple trees.
 
-        The value-keyed lookup maps are rebuilt from the loaded nodes rather than
-        loaded from the dictionary: JSON serialization stringifies dictionary
-        keys, so the serialized maps lose lookup semantics for non-string node
-        values (e.g., integer zip codes).
+        All lookup maps are rebuilt from the loaded nodes rather than loaded from
+        the dictionary: JSON serialization stringifies dictionary keys, so the
+        serialized value-keyed maps lose lookup semantics for non-string node
+        values (e.g., integer zip codes), and rebuilding all maps guarantees they
+        are consistent with the loaded nodes even for stale or hand-edited
+        configurations. The serialized maps in the dictionary are ignored.
+
+        Raises
+        ------
+        ValueError
+            If two leaves share the same value (see
+            update_lowest_node_with_descendant_leaves_if).
         """
         remaining_nodes = dict(json_obj["nodes"])
         queue = deque([json_obj["root_nid"]] if remaining_nodes else [])
@@ -658,13 +672,7 @@ class GTree(Tree):
         assert not remaining_nodes
         self.update_highest_node_with_value_if()
         self.update_lowest_node_with_descendant_leaves_if()
-        self.nid_to_descendant_leaf_values = {
-            # json doesn't distinguish between tuples and lists
-            # we store these internally as tuples (more memory efficient and immutable)
-            # nids are strings, so these keys survive JSON serialization
-            nid: tuple(descendant_leaf_values)
-            for nid, descendant_leaf_values in json_obj["nid_to_descendant_leaf_values"].items()
-        }
+        self.update_descendant_leaf_values_if()
 
     def __eq__(self, other: Any) -> bool:
         """
