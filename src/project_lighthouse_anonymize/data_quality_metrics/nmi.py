@@ -158,14 +158,18 @@ def compute_normalized_mutual_information_sampled_scaled(
         x, y = x.to_numpy().ravel(), y.to_numpy().ravel()
         x_idxs = list(range(len(x)))
         # We run multiple times to smooth out variance in mi computations,
-        # only run once if leq sample size.
+        # only run once if leq sample size. Use per-qid locals so one qid's
+        # row count doesn't affect the sampling parameters of the other qids.
         if len(x_idxs) <= sample_size:
-            number_runs = 1
-            sample_size = len(x_idxs)
-        mi_samples_1: list[float] = [0.0] * number_runs
-        mi_samples_2: list[float] = [0.0] * number_runs
-        for i in range(number_runs):
-            idx_samples = rng.choice(x_idxs, sample_size, replace=False)
+            qid_number_runs = 1
+            qid_sample_size = len(x_idxs)
+        else:
+            qid_number_runs = number_runs
+            qid_sample_size = sample_size
+        mi_samples_1: list[float] = [0.0] * qid_number_runs
+        mi_samples_2: list[float] = [0.0] * qid_number_runs
+        for i in range(qid_number_runs):
+            idx_samples = rng.choice(x_idxs, qid_sample_size, replace=False)
             tx, ty = x[idx_samples], y[idx_samples]
             random_state = rng.integers(MAX_RANDOM_STATE)
             x_elements_all_same = _elements_all_same(tx, x_discrete)
@@ -219,7 +223,11 @@ def compute_normalized_mutual_information_sampled_scaled(
             for num, den, arr in zip(
                 [mi_x_y, mi_x_y], [mi_x_x, mi_y_y], [mi_samples_1, mi_samples_2]
             ):
-                if np.isclose(den, 0.0, rtol=1e-5, atol=EPSILON):
+                if np.isnan(num) or np.isnan(den):
+                    # a mutual information computation failed, so the NMI is undefined;
+                    # min(max(0, nan), 1.0) below would silently coerce nan to 0
+                    arr[i] = NOT_DEFINED_NA
+                elif np.isclose(den, 0.0, rtol=1e-5, atol=EPSILON):
                     if np.isclose(num, 0.0, rtol=1e-5, atol=EPSILON):
                         # special case where if there is no information to encode, then we have achieved perfect data quality w.r.t. mutual information
                         arr[i] = 1.0

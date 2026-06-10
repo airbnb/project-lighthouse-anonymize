@@ -1105,7 +1105,11 @@ class Implementation_Base(metaclass=ABCMeta):
         # the tiebreaker between two proposed cuts with the same score_1
         # is pct_non_suppressed: we *prefer* to suppress earlier in
         # the Mondrian cut tree because it should make better use of the suppression budget.
-        score_2 = len(proposed_cut.input_df) / len(input_df)
+        # Records in neither further_cuts nor output_dfs are the ones the cut suppresses.
+        score_2 = (
+            sum(len(df) for df in proposed_cut.output_dfs)
+            + sum(len(df) for df in proposed_cut.further_cuts)
+        ) / len(proposed_cut.input_df)
         # sample down dfs to limit run-time complexity w.r.t. df lengths
         input_df = self.__score_proposed_cut_sample(proposed_cut.input_df, 42)
         output_dfs = [

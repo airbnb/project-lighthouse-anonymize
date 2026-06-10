@@ -335,6 +335,9 @@ def _compute_revised_information_loss_metric_numericals(
             rilm[qid] = ((rilm_df["e_len"] * rilm_df["ril_ei"]).sum()) / (
                 (rilm_df["e_len"] * rilm_df["ril_ei"].isna().apply(lambda x: int(not x))).sum()
             )
+        else:
+            # the QID's original values are all NaN, so its perimeter (and RILM) is undefined
+            rilm[qid] = NOT_DEFINED_NA
     return rilm
 
 
