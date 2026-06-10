@@ -57,7 +57,10 @@ def calculate_p_k(
     Raises
     ------
     ValueError
-        If input_df is empty or if any provided column names don't exist in input_df.
+        If input_df is empty, if any provided column names don't exist in input_df,
+        or if any QID or sensitive attribute column has a categorical dtype.
+        Use project_lighthouse_anonymize.wrappers.dtype_conversion.
+        convert_categorical_to_object() to convert categorical columns first.
 
     Notes
     -----
@@ -82,43 +85,87 @@ def calculate_p_k(
     if len(input_df) == 0:
         raise ValueError("Input dataframe has no rows")
     cols = [str(col_name) for col_name in input_df.columns]
-    qids = (
-        cols.copy() if qids is None else list(qids)
-    )  # need a list object for pandas.DataFrame.groupby below; it might be a tuple
-    for qid_col in qids:
-        if qid_col not in cols:
-            raise ValueError(f"QID col ({qid_col}) is not a column in the input dataframe")
-    if sens_attr is not None:
-        if sens_attr not in cols:
-            raise ValueError(
-                f"Sensitive attribute col ({sens_attr}) is not a column in the input dataframe"
-            )
-        if sens_attr in qids:
-            qids.remove(sens_attr)
+    qids = _normalize_qids(cols, qids)
+    qids, sens_attr = _validate_sens_attr(cols, qids, sens_attr)
+    _reject_categorical_columns(input_df, [*qids, *([sens_attr] if sens_attr is not None else [])])
 
     input_df = input_df.copy(deep=True)
     cols_to_drop = set(cols) - (set(qids) | set([sens_attr]))
     input_df.drop(list(cols_to_drop), axis="columns", inplace=True)
 
     if len(qids) > 0:
-        # observed=True so that unobserved categorical combinations do not create
-        # phantom empty equivalence classes: an empty class contains no individuals,
-        # but would otherwise drive k (via a zero count) and p (via nunique() == 0).
-        actual_k = int(input_df.groupby(qids, dropna=False, observed=True).size().min())
-        if sens_attr is not None:
-            actual_p = int(
-                cast(
-                    int,
-                    input_df.groupby(qids, dropna=False, observed=True)[sens_attr].nunique().min(),
-                )
-            )
-        else:
-            actual_p = None
+        actual_p, actual_k = _compute_p_k_with_qids(input_df, qids, sens_attr)
     else:
-        actual_k = len(input_df)
-        if sens_attr is not None:
-            actual_p = int(input_df[sens_attr].nunique())
-        else:
-            actual_p = None
+        actual_p, actual_k = _compute_p_k_without_qids(input_df, sens_attr)
 
     return actual_p, cast(int, actual_k)
+
+
+def _normalize_qids(cols: list[str], qids: Optional[list[str]]) -> list[str]:
+    normalized = cols.copy() if qids is None else list(qids)
+    for qid_col in normalized:
+        if qid_col not in cols:
+            raise ValueError(f"QID col ({qid_col}) is not a column in the input dataframe")
+    return normalized
+
+
+def _validate_sens_attr(
+    cols: list[str], qids: list[str], sens_attr: Optional[str]
+) -> tuple[list[str], Optional[str]]:
+    if sens_attr is None:
+        return qids, None
+    if sens_attr not in cols:
+        raise ValueError(
+            f"Sensitive attribute col ({sens_attr}) is not a column in the input dataframe"
+        )
+    if sens_attr in qids:
+        qids.remove(sens_attr)
+    return qids, sens_attr
+
+
+def _compute_p_k_with_qids(
+    df: pd.DataFrame,
+    qids: list[str],
+    sens_attr: Optional[str],
+) -> tuple[Optional[int], int]:
+    grouped = df.groupby(qids, dropna=False, observed=True)
+    actual_k = int(grouped.size().min())
+    if sens_attr is None:
+        return None, actual_k
+    return int(cast(int, grouped[sens_attr].nunique().min())), actual_k
+
+
+def _compute_p_k_without_qids(
+    df: pd.DataFrame,
+    sens_attr: Optional[str],
+) -> tuple[Optional[int], int]:
+    actual_k = len(df)
+    if sens_attr is None:
+        return None, actual_k
+    return int(df[sens_attr].nunique()), actual_k
+
+
+def _reject_categorical_columns(input_df: pd.DataFrame, cols: list[str]) -> None:
+    """
+    Raise ValueError if any of the named columns has a categorical dtype.
+
+    Parameters
+    ----------
+    input_df : pd.DataFrame
+        DataFrame to check.
+    cols : List[str]
+        Column names to check.
+
+    Raises
+    ------
+    ValueError
+        If any column has a categorical dtype.
+    """
+    categorical_cols = [col for col in cols if isinstance(input_df.dtypes[col], pd.CategoricalDtype)]
+    if categorical_cols:
+        raise ValueError(
+            f"Column(s) {categorical_cols} have a categorical dtype, which is not supported; use "
+            "project_lighthouse_anonymize.wrappers.dtype_conversion."
+            "convert_categorical_to_object() before and "
+            "convert_object_to_categorical() after"
+        )

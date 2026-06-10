@@ -1,14 +1,11 @@
 """
 Tests for disclosure risk metrics on categorical dtype columns.
 
-pandas groupby defaults to observed=False for categorical columns, producing
-phantom empty equivalence classes for unobserved categories. Empty classes
-contain no individuals and must not influence disclosure risk metrics:
-calculate_p_k must not report p=0/k=None, and entropy l-diversity must not
-report NaN or worst-case 0.0 entropy for classes that do not exist.
+Categorical columns are outside the library's documented dtype contract
+(object/int64/float64); calculate_p_k and compute_entropy_log_l_diversity
+reject them up front with conversion guidance instead of silently producing
+phantom empty equivalence classes for unobserved categories.
 """
-
-import math
 
 import numpy as np
 import pandas as pd
@@ -23,7 +20,7 @@ from project_lighthouse_anonymize.disclosure_risk_metrics.p_sensitive_k_anonymit
 
 
 class TestCalculatePKCategorical:
-    """Tests for calculate_p_k with categorical QID columns"""
+    """Tests that categorical dtype columns are rejected with clear guidance"""
 
     @staticmethod
     def categorical_qid_df():
@@ -35,45 +32,52 @@ class TestCalculatePKCategorical:
             }
         )
 
-    def test_categorical_qid_with_unobserved_category(self):
-        """Unobserved categories must not produce phantom empty equivalence classes"""
-        actual_p, actual_k = calculate_p_k(self.categorical_qid_df(), ["qid"], "sens")
-        assert (actual_p, actual_k) == (2, 2), f"got ({actual_p}, {actual_k})"
+    def test_categorical_qid_rejected(self):
+        """Categorical QID columns fail validation with conversion guidance"""
+        with pytest.raises(ValueError, match="categorical"):
+            calculate_p_k(self.categorical_qid_df(), ["qid"], "sens")
 
-    def test_categorical_qid_k_only(self):
-        """k computation alone must also ignore phantom groups"""
-        _, actual_k = calculate_p_k(self.categorical_qid_df(), ["qid"])
-        assert actual_k == 2, f"got {actual_k}"
+    def test_categorical_qid_k_only_rejected(self):
+        """Categorical QID columns are rejected even when sens_attr is not provided"""
+        with pytest.raises(ValueError, match="categorical"):
+            calculate_p_k(self.categorical_qid_df(), ["qid"])
+
+    def test_categorical_sensitive_attr_rejected(self):
+        """Categorical sensitive attribute columns fail validation with conversion guidance"""
+        df = pd.DataFrame(
+            {
+                "qid": ["x", "x", "y", "y"],
+                "sens": pd.Categorical(["a", "b", "a", "b"], categories=["a", "b", "c"]),
+            }
+        )
+        with pytest.raises(ValueError, match="categorical"):
+            calculate_p_k(df, ["qid"], "sens")
 
 
 class TestEntropyLDiversityCategorical:
-    """Tests for entropy l-diversity with categorical dtype columns"""
+    """Tests that categorical dtype columns are rejected with clear guidance"""
 
-    def test_categorical_sensitive_column(self):
-        """Unobserved sensitive categories (count 0) must not poison entropy with NaN"""
+    def test_categorical_sensitive_column_rejected(self):
+        """Categorical sensitive attribute columns fail validation with conversion guidance"""
         df = pd.DataFrame(
             {
                 "qid": ["x", "x", "y", "y"],
                 "sens": pd.Categorical(["a", "b", "a", "a"], categories=["a", "b", "c"]),
             }
         )
-        avg, minimum, maximum = compute_entropy_log_l_diversity(df, ["qid"], "sens")
-        assert minimum == pytest.approx(0.0)
-        assert maximum == pytest.approx(math.log(2))
-        assert avg == pytest.approx(math.log(2) / 2)
+        with pytest.raises(ValueError, match="categorical"):
+            compute_entropy_log_l_diversity(df, ["qid"], "sens")
 
-    def test_categorical_qid_column(self):
-        """Phantom empty q*-blocks must not contribute worst-case 0.0 entropy"""
+    def test_categorical_qid_column_rejected(self):
+        """Categorical QID columns fail validation with conversion guidance"""
         df = pd.DataFrame(
             {
                 "qid": pd.Categorical(["x", "x", "y", "y"], categories=["x", "y", "z"]),
                 "sens": ["a", "b", "a", "b"],
             }
         )
-        avg, minimum, maximum = compute_entropy_log_l_diversity(df, ["qid"], "sens")
-        assert minimum == pytest.approx(math.log(2))
-        assert maximum == pytest.approx(math.log(2))
-        assert avg == pytest.approx(math.log(2))
+        with pytest.raises(ValueError, match="categorical"):
+            compute_entropy_log_l_diversity(df, ["qid"], "sens")
 
 
 class TestEntropyLDiversityEdgeCases:
@@ -81,6 +85,8 @@ class TestEntropyLDiversityEdgeCases:
 
     def test_empty_qids_single_equivalence_class(self):
         """No QIDs means one whole-dataset equivalence class, like calculate_p_k"""
+        import math
+
         df = pd.DataFrame({"sens": ["a", "b", "a", "b"]})
         avg, minimum, maximum = compute_entropy_log_l_diversity(df, [], "sens")
         assert avg == pytest.approx(math.log(2))
@@ -89,6 +95,8 @@ class TestEntropyLDiversityEdgeCases:
 
     def test_all_nan_sensitive_class_excluded(self):
         """A class with only NaN sensitive values has undefined entropy, not 0.0"""
+        import math
+
         df = pd.DataFrame(
             {
                 "qid": [1, 1, 2, 2],

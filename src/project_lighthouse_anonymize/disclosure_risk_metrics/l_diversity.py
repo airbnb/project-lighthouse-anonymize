@@ -16,6 +16,9 @@ import numpy as np
 import pandas as pd
 
 from project_lighthouse_anonymize.constants import NOT_DEFINED_NA
+from project_lighthouse_anonymize.disclosure_risk_metrics.p_sensitive_k_anonymity import (
+    _reject_categorical_columns,
+)
 
 
 def compute_entropy_log_l_diversity(
@@ -72,6 +75,13 @@ def compute_entropy_log_l_diversity(
     is excluded from the aggregation; if every class is excluded, all three
     return values are NaN.
 
+    Raises
+    ------
+    ValueError
+        If any QID or sensitive attribute column has a categorical dtype.
+        Use project_lighthouse_anonymize.wrappers.dtype_conversion.
+        convert_categorical_to_object() to convert categorical columns first.
+
     References
     ----------
     A. Machanavajjhala, J. Gehrke, D. Kifer, and M. Venkitasubramaniam,
@@ -81,6 +91,8 @@ def compute_entropy_log_l_diversity(
     """
     if len(sensitive_df) == 0:
         return (NOT_DEFINED_NA, NOT_DEFINED_NA, NOT_DEFINED_NA)
+
+    _reject_categorical_columns(sensitive_df, [*qids, sens_attr_col])
 
     l_values = []
     for q_star_block_df in _iter_q_star_blocks(sensitive_df, qids):
@@ -114,8 +126,6 @@ def _iter_q_star_blocks(sensitive_df: pd.DataFrame, qids: list[str]) -> Iterator
     if len(qids) == 0:
         yield sensitive_df
         return
-    # observed=True so that unobserved categorical combinations do not create
-    # phantom empty equivalence classes with worst-case 0.0 entropy
     q_star_block_dfs = sensitive_df.groupby(
         qids if len(qids) > 1 else qids[0], dropna=False, observed=True
     )
