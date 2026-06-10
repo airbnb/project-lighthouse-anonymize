@@ -76,10 +76,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `select_best_run` also now scores with the same thresholds used for its
   final filtering pass
   ([#17](https://github.com/airbnb/project-lighthouse-anonymize/pull/17))
-- `calculate_p_k` and `compute_entropy_log_l_diversity` no longer count
-  phantom empty equivalence classes created by unobserved categories of
-  categorical columns; previously categorical QIDs yielded p=0/k=None and
-  NaN or worst-case 0.0 entropy for classes containing no individuals
+- `calculate_p_k` and `compute_entropy_log_l_diversity` now reject
+  categorical dtype columns up front with conversion guidance, consistent
+  with `p_sensitize` and the documented dtype contract; previously
+  categorical QIDs yielded p=0/k=None and worst-case 0.0 entropy due to
+  phantom empty equivalence classes from unobserved categories
   ([#17](https://github.com/airbnb/project-lighthouse-anonymize/pull/17))
 - `p_sensitize` raises a clear per-class error when an equivalence class
   cannot reach `target_p` because too few values with non-zero probability
@@ -102,12 +103,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   converted to NaN, corrupting generalized values into missing data
   ([#17](https://github.com/airbnb/project-lighthouse-anonymize/pull/17))
 - `GTree.from_config_json` no longer destructively consumes its input
-  dictionary (a second construction from the same dictionary silently
-  produced an empty tree with stale lookup maps), and all lookup maps are
-  now rebuilt from the loaded nodes instead of trusted from the file: JSON
-  round trips preserve lookups for non-string node values (previously
-  stringified by JSON serialization), and stale or hand-edited
-  configurations can no longer produce internally inconsistent trees
+  dictionary; a second construction from the same dictionary previously
+  produced an empty tree. All lookup maps are now rebuilt from the loaded
+  nodes: JSON serialization stringifies dict keys, so verbatim-loading
+  value-keyed maps lost lookup semantics for non-string node values (e.g.
+  integer zip codes)
   ([#17](https://github.com/airbnb/project-lighthouse-anonymize/pull/17))
 - `GTree.add_default_geometric_sizes` no longer crashes on a root-only tree
   (e.g. `make_flat_default_gtree(set())`); the root receives geometric size 0

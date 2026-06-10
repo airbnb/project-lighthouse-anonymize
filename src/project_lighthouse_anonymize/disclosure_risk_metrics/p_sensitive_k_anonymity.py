@@ -161,7 +161,9 @@ def _reject_categorical_columns(input_df: pd.DataFrame, cols: list[str]) -> None
     ValueError
         If any column has a categorical dtype.
     """
-    categorical_cols = [col for col in cols if isinstance(input_df.dtypes[col], pd.CategoricalDtype)]
+    categorical_cols = [
+        col for col in cols if isinstance(input_df.dtypes[col], pd.CategoricalDtype)
+    ]
     if categorical_cols:
         raise ValueError(
             f"Column(s) {categorical_cols} have a categorical dtype, which is not supported; use "
