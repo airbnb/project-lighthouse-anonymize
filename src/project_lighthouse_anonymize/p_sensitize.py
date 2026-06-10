@@ -79,43 +79,19 @@ def p_sensitize(
     This is an internal implementation function. For external use, please use
     project_lighthouse_anonymize.wrappers.p_sensitize instead.
 
-    The function first checks if the dataset is already p-sensitive k-anonymous.
-    If not, it processes each equivalence class to ensure it has at least p
-    distinct sensitive values by replacing some values with alternatives from
-    the sens_attr_value_to_prob dictionary.
+    The function first checks if the dataset is already p-sensitive k-anonymous,
+    returning early if so. If not, it processes each equivalence class to ensure
+    it has at least p distinct sensitive values by replacing some values with
+    alternatives from the sens_attr_value_to_prob dictionary.
     """
-    if len(input_df) == 0:
-        raise ValueError("Input dataframe has no rows")
-    cols = [str(col_name) for col_name in input_df.columns]
     qids = list(qids)  # need a list object for pandas.DataFrame.groupby below; it might be a tuple
-    for qid_col in qids:
-        if qid_col not in cols:
-            raise ValueError(f"QID col ({qid_col}) is not a column in the input dataframe")
-    if sens_attr_col not in cols:
-        raise ValueError(
-            f"Sensitive attribute col ({sens_attr_col}) is not a column in the input dataframe"
-        )
-    if any(input_df[sens_attr_col].isna()):
-        raise ValueError(
-            "Sensitive attribute value na is not allowed due to a bug in pandas.groupby.count"
-        )
-    if target_p < 1:
-        raise ValueError("target_p must be >= 1")
-    if target_k < target_p:
-        raise ValueError(f"Target k ({target_k}) not >= target p ({target_p}); p must be <= k")
-    if target_p > len(sens_attr_value_to_prob.keys()):
-        raise ValueError(
-            f"Target p ({target_p}) cannot be > number of sensitive attributes for which we have priors"
-        )
-    actual_p, actual_k = calculate_p_k(input_df, qids, sens_attr=sens_attr_col)
-    if actual_k is not None and actual_k < target_k:
-        raise ValueError(
-            f"Actual k ({actual_k}) not >= target k ({target_k}); P-Sensitize does not support increasing the actual k, due to a potential privacy attack vector"
-        )
+    _validate_p_sensitize_inputs(
+        input_df, qids, sens_attr_col, target_p, target_k, sens_attr_value_to_prob
+    )
+    actual_p, _ = _calculate_and_validate_p_k(input_df, qids, sens_attr_col, target_k)
 
     output_df = input_df.copy()
 
-    # break early if the dataset is already p-sensitive k-anonymouse
     if actual_p is not None and actual_p >= target_p:
         return (output_df, 0)
 
@@ -152,6 +128,147 @@ def p_sensitize(
         )
     output_df.loc[all_indices_perturbated, sens_attr_col] = all_indices_new_sens_attr_values
     return (output_df, len(all_indices_perturbated))
+
+
+def _validate_p_sensitize_inputs(
+    input_df: pd.DataFrame,
+    qids: list[str],
+    sens_attr_col: str,
+    target_p: int,
+    target_k: int,
+    sens_attr_value_to_prob: dict[str, float],
+) -> None:
+    """
+    Validate the inputs to p_sensitize.
+
+    Parameters
+    ----------
+    input_df : pd.DataFrame
+        Input dataframe to be p-sensitized.
+    qids : List[str]
+        List of quasi-identifier column names.
+    sens_attr_col : str
+        Column name of the sensitive attribute.
+    target_p : int
+        The minimum number of distinct sensitive attribute values required
+        in each equivalence class.
+    target_k : int
+        The minimum number of records required in each equivalence class.
+    sens_attr_value_to_prob : Dict[str, float]
+        Dictionary mapping allowable sensitive attribute values to their
+        selection probabilities during perturbation.
+
+    Raises
+    ------
+    ValueError
+        If any input requirement is not met.
+    """
+    if len(input_df) == 0:
+        raise ValueError("Input dataframe has no rows")
+    cols = [str(col_name) for col_name in input_df.columns]
+    for qid_col in qids:
+        if qid_col not in cols:
+            raise ValueError(f"QID col ({qid_col}) is not a column in the input dataframe")
+    if sens_attr_col not in cols:
+        raise ValueError(
+            f"Sensitive attribute col ({sens_attr_col}) is not a column in the input dataframe"
+        )
+    if any(input_df[sens_attr_col].isna()):
+        raise ValueError(
+            "Sensitive attribute value na is not allowed due to a bug in pandas.groupby.count"
+        )
+    if target_p < 1:
+        raise ValueError("target_p must be >= 1")
+    if target_k < target_p:
+        raise ValueError(f"Target k ({target_k}) not >= target p ({target_p}); p must be <= k")
+    if target_p > len(sens_attr_value_to_prob.keys()):
+        raise ValueError(
+            f"Target p ({target_p}) cannot be > number of sensitive attributes for which we have priors"
+        )
+
+
+def _calculate_and_validate_p_k(
+    input_df: pd.DataFrame,
+    qids: list[str],
+    sens_attr_col: str,
+    target_k: int,
+) -> tuple[Optional[int], Optional[int]]:
+    """
+    Calculate the actual p and k values and validate the k requirement.
+
+    Parameters
+    ----------
+    input_df : pd.DataFrame
+        Input dataframe to be p-sensitized.
+    qids : List[str]
+        List of quasi-identifier column names.
+    sens_attr_col : str
+        Column name of the sensitive attribute.
+    target_k : int
+        The minimum number of records required in each equivalence class.
+
+    Returns
+    -------
+    Tuple[Optional[int], Optional[int]]
+        The (actual_p, actual_k) values from calculate_p_k.
+
+    Raises
+    ------
+    ValueError
+        If the actual k is below target_k.
+    """
+    actual_p, actual_k = calculate_p_k(input_df, qids, sens_attr=sens_attr_col)
+    if actual_k is not None and actual_k < target_k:
+        raise ValueError(
+            f"Actual k ({actual_k}) not >= target k ({target_k}); P-Sensitize does not support increasing the actual k, due to a potential privacy attack vector"
+        )
+    return actual_p, actual_k
+
+
+def _select_indices_to_perturbate(
+    equivalence_class_df: pd.DataFrame,
+    sens_attr_col: str,
+    n_to_perturbate: int,
+    rng: np.random.Generator,
+) -> list[Any]:
+    """
+    Select records to perturbate without eliminating any existing sensitive value.
+
+    Records are selected one at a time, only ever drawing from records whose
+    sensitive value still has more than one non-perturbated record. This
+    guarantees that every sensitive value present before perturbation remains
+    present afterwards; eliminating a value would leave the equivalence class
+    below the target p.
+
+    Parameters
+    ----------
+    equivalence_class_df : pd.DataFrame
+        DataFrame containing records from a single equivalence class.
+    sens_attr_col : str
+        Column name of the sensitive attribute.
+    n_to_perturbate : int
+        Number of records to select for perturbation.
+    rng : np.random.Generator
+        Random number generator for deterministic sampling.
+
+    Returns
+    -------
+    List[Any]
+        Indices of the records selected for perturbation.
+    """
+    sens_values = cast(pd.Series, equivalence_class_df[sens_attr_col])
+    remaining_counts = sens_values.value_counts().to_dict()
+    indices_to_perturbate: list[Any] = []
+    for _ in range(n_to_perturbate):
+        eligible_indices = [
+            index
+            for index in equivalence_class_df.index
+            if index not in indices_to_perturbate and remaining_counts[sens_values.loc[index]] > 1
+        ]
+        index_to_perturbate = rng.choice(np.asarray(eligible_indices))
+        indices_to_perturbate.append(index_to_perturbate)
+        remaining_counts[sens_values.loc[index_to_perturbate]] -= 1
+    return indices_to_perturbate
 
 
 def _impl_p_sensitize_equivalence_class(
@@ -205,20 +322,15 @@ def _impl_p_sensitize_equivalence_class(
     actual_p = equivalence_class_df[sens_attr_col].nunique()
     if actual_p >= target_p:
         return equivalence_class_df
-    sens_values_to_perturbate = equivalence_class_df[sens_attr_col].value_counts()
+    existing_sens_values = set(equivalence_class_df[sens_attr_col])
     sens_attr_value_to_prob = {
         sens_attr_value: prob
         for sens_attr_value, prob in sens_attr_value_to_prob.items()
-        if sens_attr_value not in sens_values_to_perturbate.index
+        if sens_attr_value not in existing_sens_values
     }
-    sens_values_to_perturbate = cast(
-        pd.Series, sens_values_to_perturbate[sens_values_to_perturbate > 1]
+    indices_to_perturbate = _select_indices_to_perturbate(
+        equivalence_class_df, sens_attr_col, target_p - actual_p, rng
     )
-    mask = cast(pd.Series, equivalence_class_df[sens_attr_col]).isin(
-        list(sens_values_to_perturbate.index)
-    )
-    indices_to_consider = cast(np.ndarray, equivalence_class_df.index[mask])
-    indices_to_perturbate = rng.choice(indices_to_consider, target_p - actual_p, replace=False)
     all_indices_perturbated.extend(indices_to_perturbate)
     potential_new_sens_attr_values = list(sens_attr_value_to_prob.keys())
     potential_new_sens_attr_probs = np.array(

@@ -223,6 +223,15 @@ def compute_revised_information_loss_metric(
         1. Dictionary for numerical QIDs
         2. Dictionary for categorical QIDs
 
+    Notes
+    -----
+    A numerical QID whose original values are all NaN in the non-suppressed
+    records has an undefined perimeter (range), so RILM is undefined for it.
+    Such QIDs are omitted from the numerical result dictionary entirely rather
+    than mapped to NaN: the QID carries no information to lose, and downstream
+    threshold checks treat a missing metric as passing while treating a NaN
+    metric as failing.
+
     See Also
     --------
     compute_revised_information_loss_metric_categoricals : Compute RILM for categorical QIDs
@@ -290,11 +299,20 @@ def _compute_revised_information_loss_metric_numericals(
     Dict[str, float]
         Dictionary mapping numerical QID names to their RILM scores. Values range
         from 0.0 (maximum information loss) to 1.0 (no information loss).
+        QIDs whose original values are all NaN are omitted from the dictionary
+        (see Notes).
 
     Notes
     -----
     The function groups records by equivalence class and calculates a weighted average
     of the RILM scores for each numerical attribute across all equivalence classes.
+
+    A QID whose original values are all NaN in the non-suppressed records has an
+    undefined perimeter (range), so its RILM is undefined; the QID is omitted
+    from the returned dictionary rather than mapped to NaN. Downstream consumers
+    rely on this: check_dq_meets_minimum_thresholds treats a missing metric as
+    passing but fails a NaN metric against a non-NaN threshold, and compute_score
+    skips missing metrics but does not guard against NaN values.
 
     See Also
     --------
