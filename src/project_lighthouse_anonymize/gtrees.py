@@ -643,12 +643,13 @@ class GTree(Tree):
         defined in the input dictionary. The input dictionary is not modified, so
         it can be used to construct multiple trees.
 
-        All lookup maps are rebuilt from the loaded nodes rather than loaded from
-        the dictionary: JSON serialization stringifies dictionary keys, so the
-        serialized value-keyed maps lose lookup semantics for non-string node
-        values (e.g., integer zip codes), and rebuilding all maps guarantees they
-        are consistent with the loaded nodes even for stale or hand-edited
-        configurations. The serialized maps in the dictionary are ignored.
+        All lookup maps are rebuilt from the loaded nodes rather than loaded
+        directly from the serialized maps in the dictionary. The node structure
+        in the dictionary is the authoritative source of truth; the serialized
+        maps are present only as a performance hint and are not read back. This
+        also avoids a JSON limitation: JSON stringifies all dict keys, so
+        value-keyed maps serialized with non-string node values (e.g., integer
+        zip codes) would lose lookup semantics if loaded directly.
 
         Raises
         ------

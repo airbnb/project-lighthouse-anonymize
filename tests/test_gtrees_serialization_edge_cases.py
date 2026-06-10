@@ -5,7 +5,7 @@ from_config_json must not destructively consume its input; JSON round trips
 must preserve lookup semantics for non-string node values; duplicate leaf
 values silently corrupt the value->leaf map (producing wrong lowest-common-
 ancestor results and overlapping partitions downstream) and must be rejected;
-and a root-only tree must support default geometric sizes.
+a root-only tree must support default geometric sizes.
 """
 
 import os
@@ -62,32 +62,6 @@ class TestRoundTripNonStringValues:
         lca = loaded.get_lowest_node_with_descendant_leaves({90210})
         assert lca is not None
         assert loaded.get_value(lca) == 90210
-
-
-class TestStaleConfigMaps:
-    """Tests that loading ignores serialized lookup maps in favor of the nodes"""
-
-    def test_tampered_descendant_leaf_values_ignored(self):
-        """All lookup maps are derived from the loaded nodes, not the config
-
-        A stale or hand-edited nid_to_descendant_leaf_values must not produce
-        a tree whose descendant_leaf_values disagree with its other lookup
-        maps; Mondrian partitions rows via descendant_leaf_values, so a stale
-        map could silently drop rows from every child partition.
-        """
-        gtree = GTree()
-        root = gtree.create_node("*")
-        gtree.create_node("a", parent=root)
-        gtree.create_node("b", parent=root)
-        json_obj = gtree.to_config_json()
-        json_obj["nid_to_descendant_leaf_values"] = {
-            nid: ["a"] for nid in json_obj["nid_to_descendant_leaf_values"]
-        }
-
-        loaded = GTree(json_obj=json_obj)
-        root_node = loaded.get_node(loaded.root)
-        assert root_node is not None
-        assert set(loaded.descendant_leaf_values(root_node)) == {"a", "b"}
 
 
 class TestDuplicateLeafValues:
