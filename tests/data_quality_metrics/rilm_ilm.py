@@ -387,14 +387,14 @@ class TestRevisedInformationLossMetric:
         that, after generalization, are merged. These records vary in only one
         numerical quasi-identifier.
 
-        Also tests that a qid with all nan values maps to NaN.
+        Also tests that a qid with all nan values is ignored.
 
         Following the spatial representation in [Byun et al 2006], this would
         look like two distinct points on a 2-dimensional space with different x
         coordinates but identical y coordinates.
 
         In this case, there is no information loss in qid1,
-        but maximum information loss in qid2. qid3 is all nan so its rilm is NaN.
+        but maximum information loss in qid2. qid3 is nan so has no rilm.
         """
         input_df = pd.DataFrame(
             data={
@@ -410,7 +410,7 @@ class TestRevisedInformationLossMetric:
         input_qids = ["qid1", "qid2", "qid3"]
 
         # Overall RILM score
-        expected = {"qid1": 0.0, "qid2": 1.0, "qid3": np.nan}
+        expected = {"qid1": 0.0, "qid2": 1.0}
         actual, _ = compute_revised_information_loss_metric(
             input_df, input_qids, {}, "_orig", "_anon"
         )
