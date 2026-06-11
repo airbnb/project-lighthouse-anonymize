@@ -10,11 +10,8 @@ Functions:
 - compute_discernibility_metric: Discernibility penalty metric
 """
 
-from typing import cast
-
 import numpy as np
 import pandas as pd
-from first import first  # type: ignore[import-untyped]
 
 from project_lighthouse_anonymize.constants import NOT_DEFINED_NA
 
@@ -186,30 +183,21 @@ def compute_discernibility_metric(
 
     # If the size of the equivalence class E is no less than k,
     # then each tuple in E gets a penalty of |E|(the number of tuples in E)
-    discernibility_metric += np.sum(
-        np.power(
-            cast(
-                pd.DataFrame,
-                non_suppressed_records[[id_col] + anon_qids]
-                .groupby(anon_qids, dropna=False)
-                .agg(["count"]),
-            ),
-            2,
-        )
-    )  # we need one additional column for agg
+    discernibility_metric += np.power(
+        non_suppressed_records[[id_col] + anon_qids]
+        .groupby(anon_qids, dropna=False)
+        .agg(["count"])
+        .to_numpy(),
+        2,
+    ).sum()  # we need one additional column for agg
     # Otherwise each tuple is assigned a penalty of
     # |D|(the total number of tuples in the dataset)
-    discernibility_metric += np.sum(
-        cast(
-            pd.DataFrame,
-            suppressed_records[[id_col] + orig_qids]
-            .groupby(orig_qids, dropna=False)
-            .agg(["count"]),
-        )
+    discernibility_metric += (
+        suppressed_records[[id_col] + orig_qids]
+        .groupby(orig_qids, dropna=False)
+        .agg(["count"])
+        .to_numpy()
         * total_records
-    )  # we need one additional column for agg
-
-    # convert from pd.Series to single value
-    discernibility_metric = first(discernibility_metric, 0.0)
+    ).sum()  # we need one additional column for agg
 
     return float(discernibility_metric)

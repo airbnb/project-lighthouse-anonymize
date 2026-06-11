@@ -333,7 +333,10 @@ def _compute_dq_metric_score(dq_value: float, minimum_dq: float) -> float:
     float
         The metric's score contribution: 0.0 for a disabled (NaN) threshold,
         -2 * minimum_dq (strictly below every attainable score) for a NaN
-        value, and otherwise the piecewise sigmoid score
+        value, 0.0 for a zero threshold met exactly (linear penalty below),
+        and otherwise the piecewise sigmoid score.
+        Both dq_value and minimum_dq must be in [0, 1] (after NaN checks);
+        a ValueError is raised for out-of-contract inputs.
     """
     if np.isnan(minimum_dq):
         return 0.0
@@ -341,11 +344,17 @@ def _compute_dq_metric_score(dq_value: float, minimum_dq: float) -> float:
         # the diff <= 0 sigmoid below approaches but never attains -2 * minimum_dq as
         # dq_value -> -inf, so this is strictly worse than any measured value
         return -2.0 * minimum_dq
+    if not (0.0 <= dq_value <= 1.0) or not (0.0 <= minimum_dq <= 1.0):
+        raise ValueError(
+            f"dq_value and minimum_dq must both be in [0, 1]; got dq_value={dq_value}, minimum_dq={minimum_dq}"
+        )
     # the score function is a piecwise sigmoid function, where we are capturing an
     # appropriately stretched (sig_l) of portion of the standard logistic function >= 0,
     # ie. the portion where the derivative is decreasing
     diff = dq_value - minimum_dq
     if diff <= 0:
+        if minimum_dq == 0.0:
+            return diff
         sig_l = (
             -3.45
             + 158 * minimum_dq
