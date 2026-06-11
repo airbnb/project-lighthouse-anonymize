@@ -10,12 +10,15 @@ Functions:
 - compute_entropy_log_l_diversity: Calculate entropy l-diversity disclosure risk across equivalence classes
 """
 
-from typing import cast
+from typing import Iterator, Optional, cast
 
 import numpy as np
 import pandas as pd
 
 from project_lighthouse_anonymize.constants import NOT_DEFINED_NA
+from project_lighthouse_anonymize.disclosure_risk_metrics.p_sensitive_k_anonymity import (
+    _reject_categorical_columns,
+)
 
 
 def compute_entropy_log_l_diversity(
@@ -56,9 +59,28 @@ def compute_entropy_log_l_diversity(
     equivalence classes, which provides stronger privacy protection and lower
     disclosure risk.
 
-    The l-diversity value for an equivalence class is computed as:
-    l = -sum(p_i * log(p_i))
-    where p_i is the proportion of records having the ith value of the sensitive attribute.
+    The value computed for an equivalence class is the entropy of its sensitive
+    attribute distribution:
+    -sum(p_i * log(p_i))
+    where p_i is the proportion of records having the ith value of the sensitive
+    attribute, summed over the values present in the class. Per Definition 4.1
+    a table is entropy l-diverse when this entropy is >= log(l) for every
+    equivalence class, so the returned quantity is log(l), not l.
+
+    If no QIDs are provided, the entire dataframe is treated as a single
+    equivalence class, consistent with calculate_p_k.
+
+    Records with a NaN sensitive value are excluded from the proportions. An
+    equivalence class with no non-NaN sensitive values has undefined entropy and
+    is excluded from the aggregation; if every class is excluded, all three
+    return values are NaN.
+
+    Raises
+    ------
+    ValueError
+        If any QID or sensitive attribute column has a categorical dtype.
+        Use project_lighthouse_anonymize.wrappers.dtype_conversion.
+        convert_categorical_to_object() to convert categorical columns first.
 
     References
     ----------
@@ -67,26 +89,75 @@ def compute_entropy_log_l_diversity(
     on Data Engineering (ICDE'06), Atlanta, GA, USA: IEEE, 2006, pp. 24-24.
     doi: 10.1109/ICDE.2006.1.
     """
-    if len(sensitive_df) == 0 or len(qids) == 0:
+    if len(sensitive_df) == 0:
         return (NOT_DEFINED_NA, NOT_DEFINED_NA, NOT_DEFINED_NA)
 
-    q_star_block_dfs = sensitive_df.groupby(qids if len(qids) > 1 else qids[0], dropna=False)
+    _reject_categorical_columns(sensitive_df, [*qids, sens_attr_col])
+
     l_values = []
-    for _, q_star_block_df in q_star_block_dfs:
-        q_star_block_df = q_star_block_df[[sens_attr_col]].copy()
-        q_star_block_df["count"] = 1
-        s_to_count = cast(
-            pd.Series, q_star_block_df.groupby(sens_attr_col).sum()["count"]
-        ).to_dict()
-        l_value = 0.0
-        total_count = sum(s_to_count.values())
-        for s, count in s_to_count.items():  # type: ignore[reportUnusedVariable]  # s is used below to construct variable name
-            p_q_star_s = count / total_count
-            l_value += p_q_star_s * np.log(p_q_star_s)
-        l_value *= -1.0
-        l_values.append(l_value)
+    for q_star_block_df in _iter_q_star_blocks(sensitive_df, qids):
+        l_value = _q_star_block_entropy(q_star_block_df, sens_attr_col)
+        if l_value is not None:
+            l_values.append(l_value)
 
     if len(l_values) == 0:
         return (NOT_DEFINED_NA, NOT_DEFINED_NA, NOT_DEFINED_NA)
 
     return float(np.mean(l_values)), float(np.min(l_values)), float(np.max(l_values))
+
+
+def _iter_q_star_blocks(sensitive_df: pd.DataFrame, qids: list[str]) -> Iterator[pd.DataFrame]:
+    """
+    Yield the q*-block (equivalence class) dataframes defined by the QIDs.
+
+    Parameters
+    ----------
+    sensitive_df : pd.DataFrame
+        DataFrame containing the data with sensitive attributes to analyze.
+    qids : List[str]
+        List of quasi-identifier column names that define the equivalence classes.
+        If empty, the entire dataframe is one equivalence class.
+
+    Yields
+    ------
+    pd.DataFrame
+        One dataframe per equivalence class.
+    """
+    if len(qids) == 0:
+        yield sensitive_df
+        return
+    q_star_block_dfs = sensitive_df.groupby(
+        qids if len(qids) > 1 else qids[0], dropna=False, observed=True
+    )
+    for _, q_star_block_df in q_star_block_dfs:
+        yield q_star_block_df
+
+
+def _q_star_block_entropy(q_star_block_df: pd.DataFrame, sens_attr_col: str) -> Optional[float]:
+    """
+    Compute the sensitive attribute entropy of a single q*-block.
+
+    Parameters
+    ----------
+    q_star_block_df : pd.DataFrame
+        DataFrame containing the records of one equivalence class.
+    sens_attr_col : str
+        Column name of the sensitive attribute.
+
+    Returns
+    -------
+    Optional[float]
+        The entropy -sum(p_i * log(p_i)) over the sensitive values present in
+        the class, or None when the class has no non-NaN sensitive values
+        (undefined entropy).
+    """
+    # value_counts drops NaN sensitive values; unobserved categories of a
+    # categorical sensitive column appear with count 0 and are excluded so
+    # that 0 * log(0) does not poison the entropy with NaN
+    s_counts = cast(pd.Series, q_star_block_df[sens_attr_col].value_counts())
+    s_counts = cast(pd.Series, s_counts[s_counts > 0])
+    total_count = s_counts.sum()
+    if total_count == 0:
+        return None
+    p_q_star = s_counts.to_numpy(dtype="float64") / total_count
+    return float(-np.sum(p_q_star * np.log(p_q_star)))

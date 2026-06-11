@@ -539,7 +539,8 @@ def compute_revised_information_loss_metric_value_for_categorical(
 
     - If the QID value is NaN: Returns NOT_DEFINED_NA
     - If the root geometric size is NaN: Returns NOT_DEFINED_NA
-    - If the root geometric size is 0: Returns 0.0 (avoids division by zero)
+    - If the root geometric size is 0: Returns 1.0 (a zero-perimeter domain has
+      no information to lose; this also avoids division by zero)
 
     The function raises a ValueError if the QID value cannot be found in the
     generalization tree.

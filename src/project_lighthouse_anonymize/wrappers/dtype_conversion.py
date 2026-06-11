@@ -11,7 +11,7 @@ from typing import Any, Optional, cast
 import numpy as np
 import pandas as pd
 
-from project_lighthouse_anonymize.constants import GTREE_ROOT_TAG, MAX_RANDOM_STATE
+from project_lighthouse_anonymize.constants import MAX_RANDOM_STATE
 from project_lighthouse_anonymize.pandas_utils import hash_df
 
 
@@ -158,10 +158,13 @@ def convert_object_to_categorical(anon_df: pd.DataFrame, col: str, metadata: Any
     """
     df_copy = anon_df.copy()
     categories = metadata
-    # Only add GTREE_ROOT_TAG if it's present in data and not already in categories
+    # Anonymization generalizes values to gtree node labels (the root tag or
+    # intermediate node labels), which are not in the original categories.
+    # pd.Categorical silently converts out-of-category values to NaN, so every
+    # label present in the data must be added to the categories.
     new_categories = list(categories)
-    if GTREE_ROOT_TAG in df_copy[col].values and GTREE_ROOT_TAG not in categories:
-        new_categories.append(GTREE_ROOT_TAG)
+    generalized_labels = set(df_copy[col].dropna()) - set(categories)
+    new_categories.extend(sorted(generalized_labels, key=str))
     df_copy[col] = pd.Categorical(df_copy[col], categories=new_categories)
     return df_copy
 

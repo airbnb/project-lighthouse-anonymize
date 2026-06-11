@@ -333,10 +333,24 @@ class GTree(Tree):
         -------
         bool
             True if the mapping was updated, False if it was already populated
+
+        Raises
+        ------
+        ValueError
+            If two leaves share the same value. The value-to-leaf mapping must
+            be a function: a silent last-one-wins collision would produce wrong
+            lowest-common-ancestor results and overlapping partitions when
+            cutting on the gtree.
         """
         if not self.value_to_leaf_node_nid:
             for leaf in self.leaves():
-                self.value_to_leaf_node_nid[self.get_value(leaf)] = leaf.identifier
+                leaf_value = self.get_value(leaf)
+                existing_nid = self.value_to_leaf_node_nid.get(leaf_value)
+                if existing_nid is not None and existing_nid != leaf.identifier:
+                    raise ValueError(
+                        f"Duplicate leaf value ({leaf_value}) found in gtree; leaf values must be unique"
+                    )
+                self.value_to_leaf_node_nid[leaf_value] = leaf.identifier
             return True
         return False
 
@@ -474,10 +488,18 @@ class GTree(Tree):
         node_to_unique_level = {node: 0 for node in self.leaves()}
 
         # We work our way up the tree.
-        # The queue starts with all parents of leaves
+        # The queue starts with all parents of leaves. The root has no parent,
+        # so it is skipped here; if the root is itself a leaf, it already has
+        # unique level 0 from above.
         # TODO(Later) merge above into the queue-based algorithm
         # and start the queue with all leaves.
-        queue = deque([self.parent(node.identifier) for node in self.leaves()])
+        queue = deque(
+            [
+                parent
+                for node in self.leaves()
+                if (parent := self.parent(node.identifier)) is not None
+            ]
+        )
         while queue:
             node = queue.popleft()
             assert node is not None
@@ -571,6 +593,12 @@ class GTree(Tree):
         -----
         This method also updates all internal mappings to ensure the serialized
         tree includes the most up-to-date information.
+
+        Raises
+        ------
+        ValueError
+            If two leaves share the same value (see
+            update_lowest_node_with_descendant_leaves_if).
         """
         # update internal maps before serializing, for efficient use later
         self.update_highest_node_with_value_if()
@@ -612,13 +640,28 @@ class GTree(Tree):
         Notes
         -----
         This method completely replaces the current tree structure with the one
-        defined in the input dictionary. It also loads all precomputed mappings
-        for efficiency.
+        defined in the input dictionary. The input dictionary is not modified, so
+        it can be used to construct multiple trees.
+
+        All lookup maps are rebuilt from the loaded nodes rather than loaded
+        directly from the serialized maps in the dictionary. The node structure
+        in the dictionary is the authoritative source of truth; the serialized
+        maps are present only as a performance hint and are not read back. This
+        also avoids a JSON limitation: JSON stringifies all dict keys, so
+        value-keyed maps serialized with non-string node values (e.g., integer
+        zip codes) would lose lookup semantics if loaded directly.
+
+        Raises
+        ------
+        ValueError
+            If two leaves share the same value (see
+            update_lowest_node_with_descendant_leaves_if).
         """
-        queue = deque([json_obj["root_nid"]] if json_obj["nodes"] else [])
+        remaining_nodes = dict(json_obj["nodes"])
+        queue = deque([json_obj["root_nid"]] if remaining_nodes else [])
         while queue:
             nid = queue.pop()
-            node_json_obj = json_obj["nodes"].pop(nid)
+            node_json_obj = remaining_nodes.pop(nid)
             value, parent_nid, geometric_size, children = node_json_obj
             self.create_node(
                 value,
@@ -627,15 +670,10 @@ class GTree(Tree):
                 geometric_size=geometric_size,
             )
             queue.extend(children)
-        assert not json_obj["nodes"]
-        self.value_to_highest_node_nid = dict(json_obj["value_to_highest_node_nid"])
-        self.nid_to_descendant_leaf_values = {
-            # json doesn't distinguish between tuples and lists
-            # we store these internally as tuples (more memory efficient and immutable)
-            nid: tuple(descendant_leaf_values)
-            for nid, descendant_leaf_values in json_obj["nid_to_descendant_leaf_values"].items()
-        }
-        self.value_to_leaf_node_nid = dict(json_obj["value_to_leaf_node_nid"])
+        assert not remaining_nodes
+        self.update_highest_node_with_value_if()
+        self.update_lowest_node_with_descendant_leaves_if()
+        self.update_descendant_leaf_values_if()
 
     def __eq__(self, other: Any) -> bool:
         """

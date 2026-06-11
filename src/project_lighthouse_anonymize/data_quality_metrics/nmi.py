@@ -112,24 +112,10 @@ def compute_normalized_mutual_information_sampled_scaled(
         # TODO(Later) require caller to specify discrete/continuous
         # _attempt_convert_to_discrete_dtype() is a hack: If a column has dtype float32 or float64, has nans, and the
         # non-nan unique value count is less than 1000, try casting it to Int64. As a result of this hack, discrete
-        # features can now have dtype int32, int64, or Int64.
+        # features can now have dtype int32, int64, or Int64. The conversion operates on series
+        # copies so the caller's dataframe is never modified.
         # TODO(Later) remove hack once we support integer dtypes w/ nan
-        non_suppressed_records = _attempt_convert_to_discrete_dtype(
-            non_suppressed_records, orig_qid, anon_qid
-        )
-        x_dtype, y_dtype = (
-            non_suppressed_records.dtypes[orig_qid],
-            non_suppressed_records.dtypes[anon_qid],
-        )
-        continuous_dtypes = {np.dtype("float32"), np.dtype("float64")}
-        x_discrete, y_discrete = (
-            x_dtype not in continuous_dtypes,
-            y_dtype not in continuous_dtypes,
-        )
-        # We only consider x, y discrete if both are not continuous
-        discrete = x_dtype not in continuous_dtypes and y_dtype not in continuous_dtypes
-        mutual_info_f = mutual_info_classif if discrete else mutual_info_regression
-        x, y = (
+        x, y = _attempt_convert_to_discrete_dtype(
             cast(pd.Series, non_suppressed_records[orig_qid]),
             cast(pd.Series, non_suppressed_records[anon_qid]),
         )
@@ -141,17 +127,43 @@ def compute_normalized_mutual_information_sampled_scaled(
         assert any(x.isna() & ~y.isna()) is False, (
             "This should never happen: there should never be any rows where the orig cell is nan, but the anon cell is not nan"
         )
+        if len(y) == 0:
+            # the qid's original values are all NA/nan: there is no data, so the NMI is undefined
+            mis_1[qid] = NOT_DEFINED_NA
+            mis_2[qid] = NOT_DEFINED_NA
+            continue
+        if all(y.isna()):
+            # Every anonymized value was locally suppressed: the anonymized column carries
+            # zero information. Replace with a constant so the constant-column convention
+            # below applies: NMIv1 = 0.0 (complete information loss, failing data quality
+            # thresholds) and NMIv2 = 1.0 (no information to encode). NaN would instead be
+            # silently dropped by the caller's nanmin aggregation, hiding the loss.
+            y = y.astype("float64")
+            y[:] = 0.0
         # Replace locally suppressed anonymized attribute values. In other words, if orig is not NA/nan but anon is
         # NA/nan, replace anon with a numerical value.
-        if len(y) > 0 and any(y.isna()) and not all(y.isna()):
+        if any(y.isna()):
             # We know no more than what is present in anonymized records
-            # so presume the missing records are just the average of those present
+            # so presume the missing records are just the average of those present.
+            # The mean is generally fractional, so an Int64 series becomes float64.
+            if y.dtype == "Int64":
+                y = y.astype("float64")
             y[y.isna()] = y.mean(skipna=True)
-        # All NA/nan values are gone by this point, so convert from Int64 to int64 so that the rest of this function can
-        # run successfully.
-        if x.dtype == "Int64" or y.dtype == "Int64":
+        # All NA/nan values are gone by this point, so convert from Int64 to int64 so that the
+        # rest of this function can run successfully. Each series is cast independently: casting
+        # a genuinely fractional float series alongside its Int64 partner would truncate it.
+        if x.dtype == "Int64":
             x = x.astype("int64")
+        if y.dtype == "Int64":
             y = y.astype("int64")
+        continuous_dtypes = {np.dtype("float32"), np.dtype("float64")}
+        x_discrete, y_discrete = (
+            x.dtype not in continuous_dtypes,
+            y.dtype not in continuous_dtypes,
+        )
+        # We only consider x, y discrete if both are not continuous
+        discrete = x_discrete and y_discrete
+        mutual_info_f = mutual_info_classif if discrete else mutual_info_regression
         # Compute random seed based only on x so that it is deterministic
         rng = __rng_from_numpy_array(x.to_numpy())
         # Pre-allocate arrays for efficient use below
@@ -368,25 +380,22 @@ def _elements_all_same(arr: np.ndarray, discrete: bool) -> bool:
         return bool(np.all(np.isclose(arr, arr[0])))
 
 
-def _attempt_convert_to_discrete_dtype(
-    non_suppressed_records: pd.DataFrame, orig_qid: str, anon_qid: str
-) -> pd.DataFrame:
+def _attempt_convert_to_discrete_dtype(x: pd.Series, y: pd.Series) -> tuple[pd.Series, pd.Series]:
     """
-    Convert floating-point QIDs to integer types with NA support when appropriate.
+    Convert floating-point QID series to integer types with NA support when appropriate.
 
     Parameters
     ----------
-    non_suppressed_records : pd.DataFrame
-        DataFrame containing QID columns to check for conversion.
-    orig_qid : str
-        Column name of the original QID values.
-    anon_qid : str
-        Column name of the anonymized QID values.
+    x : pd.Series
+        Series containing the original QID values.
+    y : pd.Series
+        Series containing the anonymized QID values.
 
     Returns
     -------
-    pd.DataFrame
-        The input DataFrame with potentially modified dtypes for the specified QID columns.
+    Tuple[pd.Series, pd.Series]
+        Copies of the input series with potentially modified dtypes. The caller's
+        data is never modified.
 
     Notes
     -----
@@ -401,29 +410,21 @@ def _attempt_convert_to_discrete_dtype(
     2. The QID contains NaN values
     3. The QID has fewer than 1,000 unique non-NaN values
 
-    If the data cannot be cast to Int64 (e.g., contains true floating-point values),
-    the original data is returned unchanged.
+    Each series is converted independently; a series that cannot be cast to Int64
+    (e.g., contains true floating-point values) is returned unchanged.
     """
-    x_dtype, y_dtype = (
-        non_suppressed_records.dtypes[orig_qid],
-        non_suppressed_records.dtypes[anon_qid],
-    )
-    x, y = non_suppressed_records[orig_qid], non_suppressed_records[anon_qid]
+    x, y = x.copy(), y.copy()
     continuous_dtypes = {np.dtype("float32"), np.dtype("float64")}
     if (
-        (x_dtype in continuous_dtypes or y_dtype in continuous_dtypes)
+        (x.dtype in continuous_dtypes or y.dtype in continuous_dtypes)
         and (x.hasnans or y.hasnans)
         and (pd.concat([x, y]).nunique(dropna=True) < 1_000)
     ):
         new_dtype = "Int64"
-        # If data cannot be cast to Int64, then the original data is returned.
-        non_suppressed_records[orig_qid] = non_suppressed_records[orig_qid].astype(
-            new_dtype, errors="ignore"
-        )
-        non_suppressed_records[anon_qid] = non_suppressed_records[anon_qid].astype(
-            new_dtype, errors="ignore"
-        )
-    return non_suppressed_records
+        # If a series cannot be cast to Int64, then it is returned unchanged.
+        x = x.astype(new_dtype, errors="ignore")
+        y = y.astype(new_dtype, errors="ignore")
+    return x, y
 
 
 def _remove_entries_where_both_missing(x: pd.Series, y: pd.Series) -> tuple[pd.Series, pd.Series]:

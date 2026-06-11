@@ -410,11 +410,7 @@ class Implementation_RILM(Implementation_Base):
 
         If dynamic breakout is enabled (i.e., `self.qid_to_breakout_score` is not None),
         the sorted cut choices are further filtered. Each `CutChoice`'s score is
-        compared against a breakout threshold.
-
-        Note: In the current implementation, the breakout score used for comparison is
-        based on the last QID processed in the outer loop, not on each cut choice's QID.
-        This may lead to unexpected behavior when yielding cut choices.
+        compared against the breakout threshold of that cut choice's QID.
 
         Args:
             nid: Node identifier, primarily used for logging purposes.

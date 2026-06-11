@@ -284,106 +284,69 @@ class TestNormalizedMutualInformationSampledScaled:
 
     def test_attempt_convert_to_discrete_dtype_0(self):
         """
-        Tests that _attempt_convert_to_discrete_dtype() will not modify a dataframe that has int64 columns.
+        Tests that _attempt_convert_to_discrete_dtype() will not modify series that have int64 dtype.
         """
-        input_df = pd.DataFrame(
-            data={
-                "qid1_orig": [1],
-                "qid1_anon": [1],
-            }
-        )
-        input_df[_ID_COL] = pd.Series(list(range(len(input_df))), dtype=np.dtype("int64"))
+        input_x = pd.Series([1], name="qid1_orig")
+        input_y = pd.Series([1], name="qid1_anon")
 
-        expected_df = pd.DataFrame(
-            data={
-                "qid1_orig": [1],
-                "qid1_anon": [1],
-            },
-            dtype=np.dtype("int64"),
-        )
-        expected_df[_ID_COL] = input_df[_ID_COL]
-        actual_df = _attempt_convert_to_discrete_dtype(input_df, "qid1_orig", "qid1_anon")
-        pd.testing.assert_frame_equal(expected_df, actual_df)
+        expected_x = pd.Series([1], name="qid1_orig", dtype=np.dtype("int64"))
+        expected_y = pd.Series([1], name="qid1_anon", dtype=np.dtype("int64"))
+        actual_x, actual_y = _attempt_convert_to_discrete_dtype(input_x, input_y)
+        pd.testing.assert_series_equal(expected_x, actual_x)
+        pd.testing.assert_series_equal(expected_y, actual_y)
 
     def test_attempt_convert_to_discrete_dtype_1(self):
         """
-        Tests that _attempt_convert_to_discrete_dtype() correctly modifies a dataframe where a QID column contains
-        nan(s) and <1000 unique values.
+        Tests that _attempt_convert_to_discrete_dtype() correctly converts series where a QID column contains
+        nan(s) and <1000 unique values, without modifying the caller's data.
         """
-        input_df = pd.DataFrame(
-            data={
-                "qid1_orig": [1, 2, 3],
-                "qid1_anon": [np.nan, 2, 3],
-            }
-        )
-        input_df[_ID_COL] = pd.Series(list(range(len(input_df))), dtype=np.dtype("int64"))
+        input_x = pd.Series([1, 2, 3], name="qid1_orig")
+        input_y = pd.Series([np.nan, 2, 3], name="qid1_anon")
 
-        expected_df = pd.DataFrame(
-            data={
-                "qid1_orig": [1, 2, 3],
-                "qid1_anon": [pd.NA, 2, 3],
-            },
-            dtype="Int64",
-        )
-        expected_df[_ID_COL] = pd.Series(list(range(len(expected_df))), dtype=np.dtype("int64"))
-        actual_df = _attempt_convert_to_discrete_dtype(input_df, "qid1_orig", "qid1_anon")
-        pd.testing.assert_frame_equal(expected_df, actual_df)
+        expected_x = pd.Series([1, 2, 3], name="qid1_orig", dtype="Int64")
+        expected_y = pd.Series([pd.NA, 2, 3], name="qid1_anon", dtype="Int64")
+        actual_x, actual_y = _attempt_convert_to_discrete_dtype(input_x, input_y)
+        pd.testing.assert_series_equal(expected_x, actual_x)
+        pd.testing.assert_series_equal(expected_y, actual_y)
+        assert input_x.dtype == np.dtype("int64"), "caller's series was modified"
+        assert input_y.dtype == np.dtype("float64"), "caller's series was modified"
 
     def test_attempt_convert_to_discrete_dtype_2(self):
         """
-        Tests that _attempt_convert_to_discrete_dtype() does not modify a dataframe where a QID column contains nan(s)
+        Tests that _attempt_convert_to_discrete_dtype() does not modify series where a QID column contains nan(s)
         but has >=1000 unique values.
         """
-        input_df = pd.DataFrame(
-            data={
-                "qid1_orig": pd.Series(list(range(1_001)), dtype=np.dtype("int64")),
-                "qid1_anon": pd.concat(
-                    [pd.Series([np.nan]), pd.Series(list(range(1_000)))],
-                    ignore_index=True,
-                ),
-            }
-        )
-        input_df[_ID_COL] = pd.Series(list(range(len(input_df))), dtype=np.dtype("int64"))
+        input_x = pd.Series(list(range(1_001)), name="qid1_orig", dtype=np.dtype("int64"))
+        input_y = pd.concat(
+            [pd.Series([np.nan]), pd.Series(list(range(1_000)))],
+            ignore_index=True,
+        ).rename("qid1_anon")
 
-        expected_df = pd.DataFrame(
-            data={
-                "qid1_orig": pd.Series(list(range(1_001)), dtype=np.dtype("int64")),
-                "qid1_anon": pd.concat(
-                    [
-                        pd.Series([np.nan]),
-                        pd.Series(list(range(1_000)), dtype=np.dtype("float64")),
-                    ],
-                    ignore_index=True,
-                ),
-            }
-        )
-        expected_df[_ID_COL] = pd.Series(list(range(len(expected_df))), dtype=np.dtype("int64"))
-        actual_df = _attempt_convert_to_discrete_dtype(input_df, "qid1_orig", "qid1_anon")
-        pd.testing.assert_frame_equal(expected_df, actual_df)
+        expected_x = pd.Series(list(range(1_001)), name="qid1_orig", dtype=np.dtype("int64"))
+        expected_y = pd.concat(
+            [
+                pd.Series([np.nan]),
+                pd.Series(list(range(1_000)), dtype=np.dtype("float64")),
+            ],
+            ignore_index=True,
+        ).rename("qid1_anon")
+        actual_x, actual_y = _attempt_convert_to_discrete_dtype(input_x, input_y)
+        pd.testing.assert_series_equal(expected_x, actual_x)
+        pd.testing.assert_series_equal(expected_y, actual_y)
 
     def test_attempt_convert_to_discrete_dtype_3(self):
         """
-        Tests that _attempt_convert_to_discrete_dtype() returns an un-modified dataframe if the dataframe contains
+        Tests that _attempt_convert_to_discrete_dtype() returns un-modified series if they contain
         float entries that cannot be cast to Int64.
         """
-        input_df = pd.DataFrame(
-            data={
-                "qid1_orig": [1.1, 2.1, 3.1],
-                "qid1_anon": [np.nan, 2.1, 3.1],
-            }
-        )
-        input_df[_ID_COL] = pd.Series(list(range(len(input_df))), dtype=np.dtype("int64"))
+        input_x = pd.Series([1.1, 2.1, 3.1], name="qid1_orig")
+        input_y = pd.Series([np.nan, 2.1, 3.1], name="qid1_anon")
 
-        expected_df = pd.DataFrame(
-            data={
-                "qid1_orig": [1.1, 2.1, 3.1],
-                "qid1_anon": [np.nan, 2.1, 3.1],
-            },
-            dtype="float64",
-        )
-        expected_df[_ID_COL] = pd.Series(list(range(len(expected_df))), dtype=np.dtype("int64"))
-        actual_df = _attempt_convert_to_discrete_dtype(input_df, "qid1_orig", "qid1_anon")
-        pd.testing.assert_frame_equal(expected_df, actual_df)
+        expected_x = pd.Series([1.1, 2.1, 3.1], name="qid1_orig", dtype="float64")
+        expected_y = pd.Series([np.nan, 2.1, 3.1], name="qid1_anon", dtype="float64")
+        actual_x, actual_y = _attempt_convert_to_discrete_dtype(input_x, input_y)
+        pd.testing.assert_series_equal(expected_x, actual_x)
+        pd.testing.assert_series_equal(expected_y, actual_y)
 
     def test_remove_entries_where_both_missing_0(self):
         """

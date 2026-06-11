@@ -658,10 +658,9 @@ class MondrianTree(Tree):
 
             # Collect data from final cut nodes (leaves with anonymized data)
             if isinstance(node.data, Node_FinalCutData):
-                df = self.__add_cut_counts(qids, nid, node.data.df) if track_cuts else node.data.df
-                if node_identifier_col is not None:
-                    df[node_identifier_col] = node.identifier
-                output_dfs.append(df)
+                output_dfs.append(
+                    self.__build_final_cut_df(node, qids, track_cuts, node_identifier_col)
+                )
 
             # Continue traversal
             for child in self.children(nid):
@@ -669,6 +668,46 @@ class MondrianTree(Tree):
 
         # Combine all partitions into the final solution
         return pd.concat(output_dfs)
+
+    def __build_final_cut_df(
+        self,
+        node: Node,
+        qids: list[str],
+        track_cuts: bool,
+        node_identifier_col: Optional[str],
+    ) -> pd.DataFrame:
+        """
+        Build the output dataframe for a final cut node.
+
+        Parameters
+        ----------
+        node : Node
+            The node with Node_FinalCutData data to extract data from
+        qids : List[str]
+            List of all quasi-identifier attributes used to build this tree
+        track_cuts : bool
+            If True, add columns showing the number of cuts on each QID
+        node_identifier_col : Optional[str]
+            If not None, add a column with this name containing the node identifier
+
+        Returns
+        -------
+        pd.DataFrame
+            The node's dataframe with any requested metadata columns added. The
+            dataframe stored in the tree is never mutated.
+        """
+        df = (
+            self.__add_cut_counts(qids, node.identifier, node.data.df)
+            if track_cuts
+            else node.data.df
+        )
+        if node_identifier_col is not None:
+            if not track_cuts:
+                # __add_cut_counts already copies; copy here so the column
+                # assignment does not mutate the dataframe stored in the tree
+                df = df.copy()
+            df[node_identifier_col] = node.identifier
+        return df
 
     def __add_cut_counts(self, qids: list[str], nid: Any, df: pd.DataFrame) -> pd.DataFrame:
         """

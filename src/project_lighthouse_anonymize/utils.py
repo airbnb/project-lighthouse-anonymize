@@ -102,6 +102,32 @@ class BlockingQueueHandler(logging.handlers.QueueHandler):
         self.queue.put(record, block=True, timeout=None)  # type: ignore[attr-defined]
 
 
+def nan_safe_cut_score_sort_key(score: tuple[float, float]) -> tuple[float, float]:
+    """
+    Map a proposed cut score tuple to a NaN-safe sort key.
+
+    Proposed cut scores are (score_1, score_2) tuples where lower is better and
+    score_1 is NaN when the scored partition has no variance. NaN never compares
+    less-than, so comparing or sorting raw tuples lets a NaN-scored cut block
+    finite-scored cuts (and violates strict weak ordering in sorted()). Mapping
+    NaN to +inf orders NaN scores as worst.
+
+    Parameters
+    ----------
+    score : Tuple[float, float]
+        A proposed cut score tuple, possibly containing NaN components.
+
+    Returns
+    -------
+    Tuple[float, float]
+        The score tuple with NaN components replaced by +inf.
+    """
+    return cast(
+        "tuple[float, float]",
+        tuple(np.inf if np.isnan(component) else component for component in score),
+    )
+
+
 @numba.jit(nopython=True)
 def max_minus_min(x: np.ndarray) -> float:
     """

@@ -374,7 +374,7 @@ def k_anonymize(
         be considered
     rilm_score_epsilon_partition_size_cutoff : float, default=0.90
         Multiple appropriate cut choices will only be considered if within
-        rilm_score_epsilon AND the partition size is <= input size *
+        rilm_score_epsilon AND the partition size is >= input size *
         this cutoff value
     complex_numerical_cut_points_modes : bool, default=False
         Whether to use a simple (single cut point) or complex (multiple cut
