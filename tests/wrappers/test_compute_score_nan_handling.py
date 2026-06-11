@@ -97,3 +97,31 @@ class TestSelectBestRunNaNFallback:
         idx, minimum_dq_met = select_best_run(runs, self.thresholds())
         assert (idx, minimum_dq_met) == (1, True)
         assert math.isfinite(compute_score(runs[0], self.thresholds()))
+
+
+class TestComputeScoreZeroThreshold:
+    """Tests for compute_score with a zero minimum_dq threshold"""
+
+    def test_zero_threshold_at_threshold(self):
+        """dq_value=0, minimum_dq=0 -> score of 0.0 (threshold met exactly)"""
+        assert compute_score({"metric": 0.0}, {"metric": 0.0}) == pytest.approx(0.0)
+
+    def test_zero_threshold_above(self):
+        """dq_value above threshold -> positive score"""
+        assert compute_score({"metric": 0.5}, {"metric": 0.0}) > 0.0
+
+    def test_zero_threshold_below_does_not_raise(self):
+        """dq_value at zero threshold -> finite score, no ZeroDivisionError"""
+        assert math.isfinite(compute_score({"metric": 0.0}, {"metric": 0.0}))
+
+
+class TestComputeScoreOutOfContract:
+    """Tests that out-of-contract inputs raise ValueError"""
+
+    def test_dq_value_above_one_raises(self):
+        with pytest.raises(ValueError):
+            compute_score({"metric": 1.5}, {"metric": 0.5})
+
+    def test_minimum_dq_above_one_raises(self):
+        with pytest.raises(ValueError):
+            compute_score({"metric": 0.5}, {"metric": 1.5})

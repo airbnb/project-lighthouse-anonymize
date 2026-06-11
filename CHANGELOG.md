@@ -49,6 +49,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `_compute_dq_metric_score` no longer raises `ZeroDivisionError` when
+  `minimum_dq=0.0` and `dq_value <= 0.0`; the zero-threshold case now returns
+  a linear penalty. Both inputs are also validated to be in `[0, 1]` (after
+  NaN checks), raising `ValueError` for out-of-contract values
+  ([#18](https://github.com/airbnb/project-lighthouse-anonymize/pull/18))
+- `compute_discernibility_metric` no longer uses deprecated
+  `numpy.sum(DataFrame)`, which emitted a `FutureWarning` and would break
+  under future NumPy/pandas versions; replaced with `.to_numpy().sum()`
+  ([#18](https://github.com/airbnb/project-lighthouse-anonymize/pull/18))
+
 - NMI values are now computed with the requested `sample_size` and
   `number_runs` for every QID; previously a QID with fewer non-missing rows
   than `sample_size` shrank the sample size and forced a single run for all
